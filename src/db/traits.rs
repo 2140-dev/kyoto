@@ -18,17 +18,11 @@ pub trait HeaderStore: Debug + Send + Sync {
         range: impl RangeBounds<u32> + Send + Sync + 'a,
     ) -> FutureResult<'a, BTreeMap<u32, Header>, Self::Error>;
 
-    /// Write an indexed map of block headers to the database, ignoring if they already exist.
+    /// Write an indexed map of block headers to the database. On conflicting heights, represented
+    /// by `u32`, the implementation must over-write the old header at that height.
     fn write<'a>(
         &'a mut self,
-        header_chain: &'a BTreeMap<u32, Header>,
-    ) -> FutureResult<'a, (), Self::Error>;
-
-    /// Write the headers to the database, replacing headers over the specified height.
-    fn write_over<'a>(
-        &'a mut self,
-        header_chain: &'a BTreeMap<u32, Header>,
-        height: u32,
+        changes: impl IntoIterator<Item = (u32, &'a Header)> + Send + Sync + 'a,
     ) -> FutureResult<'a, (), Self::Error>;
 
     /// Return the height of a block hash in the database, if it exists.
@@ -116,23 +110,12 @@ mod test {
 
         fn write<'a>(
             &'a mut self,
-            _header_chain: &'a BTreeMap<u32, Header>,
+            _changes: impl IntoIterator<Item = (u32, &'a Header)> + Send + Sync + 'a,
         ) -> FutureResult<'a, (), Self::Error> {
             async fn do_write() -> Result<(), Infallible> {
                 Ok(())
             }
             Box::pin(do_write())
-        }
-
-        fn write_over<'a>(
-            &'a mut self,
-            _header_chain: &'a BTreeMap<u32, Header>,
-            _height: u32,
-        ) -> FutureResult<'a, (), Self::Error> {
-            async fn do_write_over() -> Result<(), Infallible> {
-                Ok(())
-            }
-            Box::pin(do_write_over())
         }
 
         fn height_of<'a>(

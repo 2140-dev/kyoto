@@ -233,22 +233,12 @@ impl<H: HeaderStore> Chain<H> {
             .db
             .lock()
             .await
-            .write(self.header_chain.headers())
-            .await
-        {
-            self.dialog.send_warning(Warning::FailedPersistence {
-                warning: format!("Could not save headers to disk: {e}"),
-            });
-        }
-    }
-
-    // Write the chain to disk, overriding previous heights
-    pub(crate) async fn flush_over_height(&mut self, height: u32) {
-        if let Err(e) = self
-            .db
-            .lock()
-            .await
-            .write_over(self.header_chain.headers(), height)
+            .write(
+                self.header_chain
+                    .headers()
+                    .iter()
+                    .map(|(height, header)| (*height, header)),
+            )
             .await
         {
             self.dialog.send_warning(Warning::FailedPersistence {
@@ -436,7 +426,7 @@ impl<H: HeaderStore> Chain<H> {
                 self.filter_chain.remove(removed_hashes);
                 self.block_queue.remove(removed_hashes);
                 self.dialog.send_event(Event::BlocksDisconnected(reorged));
-                self.flush_over_height(stem).await;
+                self.flush_to_disk().await;
                 Ok(())
             } else {
                 self.dialog.send_warning(Warning::UnexpectedSyncError {

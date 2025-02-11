@@ -162,72 +162,33 @@ impl SqliteHeaderDb {
 
     async fn write(
         &mut self,
-        header_chain: &BTreeMap<u32, Header>,
+        changes: impl IntoIterator<Item = (u32, &Header)> + Send + Sync,
     ) -> Result<(), SqlHeaderStoreError> {
         let mut write_lock = self.conn.lock().await;
         let tx = write_lock.transaction()?;
-        let best_height: Option<u32> =
-            tx.query_row("SELECT MAX(height) FROM headers", [], |row| row.get(0))?;
-        for (height, header) in header_chain {
-            if height.ge(&(best_height.unwrap_or(0))) {
-                let hash: String = header.block_hash().to_string();
-                let version: i32 = header.version.to_consensus();
-                let prev_hash: String = header.prev_blockhash.as_raw_hash().to_string();
-                let merkle_root: String = header.merkle_root.to_string();
-                let time: u32 = header.time;
-                let bits: u32 = header.bits.to_consensus();
-                let nonce: u32 = header.nonce;
-                let stmt = "INSERT OR REPLACE INTO headers (height, block_hash, version, prev_hash, merkle_root, time, bits, nonce) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)";
-                tx.execute(
-                    stmt,
-                    params![
-                        height,
-                        hash,
-                        version,
-                        prev_hash,
-                        merkle_root,
-                        time,
-                        bits,
-                        nonce
-                    ],
-                )?;
-            }
-        }
-        tx.commit()?;
-        Ok(())
-    }
-
-    async fn write_over(
-        &mut self,
-        header_chain: &BTreeMap<u32, Header>,
-        height: u32,
-    ) -> Result<(), SqlHeaderStoreError> {
-        let mut write_lock = self.conn.lock().await;
-        let tx = write_lock.transaction()?;
-        for (new_height, header) in header_chain {
-            if new_height.ge(&height) {
-                let hash: String = header.block_hash().to_string();
-                let version: i32 = header.version.to_consensus();
-                let prev_hash: String = header.prev_blockhash.as_raw_hash().to_string();
-                let merkle_root: String = header.merkle_root.to_string();
-                let time: u32 = header.time;
-                let bits: u32 = header.bits.to_consensus();
-                let nonce: u32 = header.nonce;
-                let stmt = "INSERT OR REPLACE INTO headers (height, block_hash, version, prev_hash, merkle_root, time, bits, nonce) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)";
-                tx.execute(
-                    stmt,
-                    params![
-                        new_height,
-                        hash,
-                        version,
-                        prev_hash,
-                        merkle_root,
-                        time,
-                        bits,
-                        nonce
-                    ],
-                )?;
-            }
+        let header_iter = changes.into_iter();
+        for (height, header) in header_iter {
+            let hash: String = header.block_hash().to_string();
+            let version: i32 = header.version.to_consensus();
+            let prev_hash: String = header.prev_blockhash.as_raw_hash().to_string();
+            let merkle_root: String = header.merkle_root.to_string();
+            let time: u32 = header.time;
+            let bits: u32 = header.bits.to_consensus();
+            let nonce: u32 = header.nonce;
+            let stmt = "INSERT OR REPLACE INTO headers (height, block_hash, version, prev_hash, merkle_root, time, bits, nonce) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)";
+            tx.execute(
+                stmt,
+                params![
+                    height,
+                    hash,
+                    version,
+                    prev_hash,
+                    merkle_root,
+                    time,
+                    bits,
+                    nonce
+                ],
+            )?;
         }
         tx.commit()?;
         Ok(())
@@ -327,17 +288,9 @@ impl HeaderStore for SqliteHeaderDb {
 
     fn write<'a>(
         &'a mut self,
-        header_chain: &'a BTreeMap<u32, Header>,
+        changes: impl IntoIterator<Item = (u32, &'a Header)> + Send + Sync + 'a,
     ) -> FutureResult<'a, (), Self::Error> {
-        Box::pin(self.write(header_chain))
-    }
-
-    fn write_over<'a>(
-        &'a mut self,
-        header_chain: &'a BTreeMap<u32, Header>,
-        height: u32,
-    ) -> FutureResult<'a, (), Self::Error> {
-        Box::pin(self.write_over(header_chain, height))
+        Box::pin(self.write(changes))
     }
 
     fn height_of<'a>(
@@ -375,7 +328,9 @@ mod tests {
         map.insert(10, block_10);
         let block_hash_8 = block_8.block_hash();
         let block_hash_9 = block_9.block_hash();
-        let w = db.write(&map).await;
+        let w = db
+            .write(map.iter().map(|(height, header)| (*height, header)))
+            .await;
         assert!(w.is_ok());
         let get_hash_9 = db.hash_at(9).await.unwrap().unwrap();
         assert_eq!(get_hash_9, block_hash_9);
@@ -405,7 +360,9 @@ mod tests {
         map.insert(8, block_8);
         map.insert(9, block_9);
         map.insert(10, block_10);
-        let w = db.write(&map).await;
+        let w = db
+            .write(map.iter().map(|(height, header)| (*height, header)))
+            .await;
         assert!(w.is_ok());
         let get_height_10 = db.header_at(10).await.unwrap().unwrap();
         assert_eq!(block_10, get_height_10);
@@ -414,11 +371,15 @@ mod tests {
         let mut map = BTreeMap::new();
         map.insert(10, new_block_10);
         map.insert(11, block_11);
-        let w = db.write_over(&map, 10).await;
+        let w = db
+            .write(map.iter().map(|(height, header)| (*height, header)))
+            .await;
         assert!(w.is_ok());
         let block_hash_11 = block_11.block_hash();
         let block_hash_10 = new_block_10.block_hash();
-        let w = db.write(&map).await;
+        let w = db
+            .write(map.iter().map(|(height, header)| (*height, header)))
+            .await;
         assert!(w.is_ok());
         let get_height_10 = db.header_at(10).await.unwrap().unwrap();
         assert_eq!(new_block_10, get_height_10);
@@ -451,7 +412,9 @@ mod tests {
         map.insert(8, block_8);
         map.insert(9, block_9);
         map.insert(10, block_10);
-        let w = db.write(&map).await;
+        let w = db
+            .write(map.iter().map(|(height, header)| (*height, header)))
+            .await;
         assert!(w.is_ok());
         let load = db.load(7..).await.unwrap();
         assert_eq!(map, load);
