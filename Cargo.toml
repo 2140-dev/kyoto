@@ -34,7 +34,7 @@ rusqlite = { version = "0.31.0", features = ["bundled"], optional = true }
 
 [features]
 default = ["database"]
-database = ["rusqlite"]
+database = ["dep:rusqlite"]
 filter-control = []
 
 [dev-dependencies]

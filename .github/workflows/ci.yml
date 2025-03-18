@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     strategy:
+      # Don't cancel other matrix jobs if one fails
+      fail-fast: false
       matrix:
         platform: [ubuntu-latest, macos-latest, windows-latest]
         toolchain: [stable, beta, nightly]
@@ -25,15 +27,18 @@ jobs:
         run: cargo clippy --all-targets
       - name: Format
         run: cargo fmt -- --check
-      - name: Build with defeault features
-        run: cargo build --verbose
-      - name: Check release build on Rust ${{ matrix.toolchain }}
-        run: cargo check --release --verbose --color always
+        # Check default features, all features, no features, some features.
+      - name: Build
+        run: |
+          cargo build --verbose
+          cargo build --verbose --all-features
+          cargo build --verbose --no-default-features
+          cargo build --verbose --no-default-features --features database,filter-control 
       - name: Unit test
         run: cargo test --verbose --lib
       - name: Doc test
         run: cargo test --verbose --doc
-  # Check that library code can be compiled with MSRV (1.63.0).
+  # Check that library code can be compiled with the MSRV (1.63.0) compiler.
   msrv:
     runs-on: ubuntu-latest
     steps:
