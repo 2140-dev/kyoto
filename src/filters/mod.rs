@@ -10,8 +10,6 @@ pub(crate) mod filter_chain;
 use bitcoin::hashes::{sha256d, Hash};
 use bitcoin::{bip158::BlockFilter, BlockHash, FilterHash, ScriptBuf};
 
-use error::FilterError;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Filter {
     filter_hash: FilterHash,
@@ -40,12 +38,9 @@ impl Filter {
         &self.block_hash
     }
 
-    pub fn contains_any<'a>(
-        &'a mut self,
-        scripts: impl Iterator<Item = &'a ScriptBuf>,
-    ) -> Result<bool, FilterError> {
+    pub fn contains_any<'a>(&'a mut self, scripts: impl Iterator<Item = &'a ScriptBuf>) -> bool {
         self.block_filter
             .match_any(&self.block_hash, scripts.map(|script| script.to_bytes()))
-            .map_err(|_| FilterError::IORead)
+            .expect("&[u8] reader is infalliable")
     }
 }

@@ -45,7 +45,6 @@ pub enum CFilterSyncError {
     UnrequestedStophash,
     UnknownFilterHash,
     MisalignedFilterHash,
-    Filter(FilterError),
 }
 
 impl core::fmt::Display for CFilterSyncError {
@@ -65,27 +64,8 @@ impl core::fmt::Display for CFilterSyncError {
                 f,
                 "the filter hash from our header chain and this filter hash do not match."
             ),
-            CFilterSyncError::Filter(_) => write!(
-                f,
-                "the filter experienced an IO error checking for Script inclusions."
-            ),
         }
     }
 }
 
 impl_sourceless_error!(CFilterSyncError);
-
-#[derive(Debug)]
-pub enum FilterError {
-    IORead,
-}
-
-impl core::fmt::Display for FilterError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FilterError::IORead => write!(f, "unable to read from the filter contents buffer."),
-        }
-    }
-}
-
-impl_sourceless_error!(FilterError);

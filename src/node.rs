@@ -24,7 +24,7 @@ use crate::{
     },
     db::traits::{HeaderStore, PeerStore},
     error::FetchHeaderError,
-    filters::{cfheader_chain::AppendAttempt, error::CFilterSyncError},
+    filters::cfheader_chain::AppendAttempt,
     network::{peer_map::PeerMap, LastBlockMonitor, PeerId, PeerTimeoutConfig},
     FilterSyncPolicy, NodeState, RejectPayload, TxBroadcastPolicy,
 };
@@ -624,14 +624,9 @@ impl<H: HeaderStore, P: PeerStore> Node<H, P> {
                 self.dialog.send_warning(Warning::UnexpectedSyncError {
                     warning: format!("Compact filter syncing encountered an error: {}", e),
                 });
-                match e {
-                    CFilterSyncError::Filter(_) => Some(MainThreadMessage::Disconnect),
-                    _ => {
-                        let mut lock = self.peer_map.lock().await;
-                        lock.ban(peer_id).await;
-                        Some(MainThreadMessage::Disconnect)
-                    }
-                }
+                let mut lock = self.peer_map.lock().await;
+                lock.ban(peer_id).await;
+                Some(MainThreadMessage::Disconnect)
             }
         }
     }
