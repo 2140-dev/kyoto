@@ -34,7 +34,6 @@ use crate::{
         cfheader_batch::CFHeaderBatch,
         cfheader_chain::{AppendAttempt, CFHeaderChain, QueuedCFHeader},
         error::{CFHeaderSyncError, CFilterSyncError},
-        filter_chain::FilterChain,
         Filter, CF_HEADER_BATCH_SIZE, FILTER_BATCH_SIZE,
     },
     messages::{Event, Warning},
@@ -48,7 +47,7 @@ const FILTER_BASIC: u8 = 0x00;
 pub(crate) struct Chain<H: HeaderStore> {
     pub(crate) header_chain: BlockTree,
     cf_header_chain: CFHeaderChain,
-    filter_chain: FilterChain,
+    last_stop_hash_request: Option<BlockHash>,
     checkpoints: HeaderCheckpoints,
     network: Network,
     db: Arc<Mutex<H>>,
@@ -72,14 +71,13 @@ impl<H: HeaderStore> Chain<H> {
     ) -> Self {
         let header_chain = BlockTree::new(anchor, network);
         let cf_header_chain = CFHeaderChain::new(anchor, quorum_required);
-        let filter_chain = FilterChain::new(anchor);
         Chain {
             header_chain,
             checkpoints,
             network,
             db: Arc::new(Mutex::new(db)),
             cf_header_chain,
-            filter_chain,
+            last_stop_hash_request: None,
             heights: height_monitor,
             scripts,
             block_queue: BlockQueue::new(),
@@ -148,7 +146,7 @@ impl<H: HeaderStore> Chain<H> {
     // The last ten heights and headers in the chain
     pub(crate) fn last_ten(&self) -> BTreeMap<u32, Header> {
         self.header_chain
-            .iter()
+            .iter_headers()
             .take(10)
             .map(|index| (index.height, index.header))
             .collect()
@@ -312,7 +310,6 @@ impl<H: HeaderStore> Chain<H> {
                         .map(|index| index.header.block_hash())
                         .collect();
                     self.cf_header_chain.remove(&removed_hashes);
-                    self.filter_chain.remove(&removed_hashes);
                     self.block_queue.remove(&removed_hashes);
                     self.write_changes(BlockHeaderChanges::Reorganized {
                         accepted,
@@ -335,6 +332,10 @@ impl<H: HeaderStore> Chain<H> {
                             Some(height) => {
                                 let tip = Tip::from_checkpoint(height, hash);
                                 self.header_chain = BlockTree::new(tip, self.network);
+                                self.cf_header_chain = CFHeaderChain::new(
+                                    HeaderCheckpoint::new(height, hash),
+                                    self.cf_header_chain.quorum_required(),
+                                );
                                 drop(db);
                                 if let Err(e) = self.load_headers().await {
                                     crate::log!(self.dialog,
@@ -385,7 +386,10 @@ impl<H: HeaderStore> Chain<H> {
             .chain_update(
                 self.header_chain.height(),
                 self.cf_header_chain.height(),
-                self.filter_chain.height(),
+                self.header_chain
+                    .iter_filters_checked()
+                    .filter(|checked| *checked)
+                    .count() as u32,
                 peer_max.unwrap_or(self.header_chain.height()),
             )
             .await;
@@ -526,11 +530,9 @@ impl<H: HeaderStore> Chain<H> {
                 format!("Found script at block: {}", filter_message.block_hash)
             );
         }
-
-        self.filter_chain.put_hash(filter_message.block_hash);
+        self.header_chain.filter_checked(filter_message.block_hash);
         let stop_hash = self
-            .filter_chain
-            .last_stop_hash_request()
+            .last_stop_hash_request
             .ok_or(CFilterSyncError::UnrequestedStophash)?;
         if filter_message.block_hash.eq(&stop_hash) {
             if !self.is_filters_synced() {
@@ -545,7 +547,14 @@ impl<H: HeaderStore> Chain<H> {
 
     // Next filter message, if there is one
     pub(crate) async fn next_filter_message(&mut self) -> GetCFilters {
-        let stop_hash_index = self.filter_chain.height() + FILTER_BATCH_SIZE + 1;
+        let mut last_unchecked_hash = self.header_chain.height();
+        for block_data in self.header_chain.iter_data() {
+            if block_data.filter_checked {
+                break;
+            }
+            last_unchecked_hash = block_data.height.to_u32();
+        }
+        let stop_hash_index = last_unchecked_hash + FILTER_BATCH_SIZE;
         let stop_hash = self
             .blockhash_at_height(stop_hash_index)
             .await
@@ -555,21 +564,24 @@ impl<H: HeaderStore> Chain<H> {
             .chain_update(
                 self.header_chain.height(),
                 self.cf_header_chain.height(),
-                self.filter_chain.height(),
+                self.header_chain
+                    .iter_filters_checked()
+                    .filter(|checked| *checked)
+                    .count() as u32,
                 peer_max.unwrap_or(self.header_chain.height()),
             )
             .await;
-        self.filter_chain.set_last_stop_hash(stop_hash);
+        self.last_stop_hash_request = Some(stop_hash);
         GetCFilters {
             filter_type: FILTER_BASIC,
-            start_height: self.filter_chain.height() + 1,
+            start_height: last_unchecked_hash,
             stop_hash,
         }
     }
 
     // Are we synced with filters
     pub(crate) fn is_filters_synced(&self) -> bool {
-        self.header_chain.height().le(&self.filter_chain.height())
+        self.header_chain.all_filters_checked()
     }
 
     // Pop a block from the queue of interesting blocks
@@ -660,11 +672,6 @@ impl<H: HeaderStore> Chain<H> {
     // Reset the compact filter queue because we received a new block
     pub(crate) fn clear_compact_filter_queue(&mut self) {
         self.cf_header_chain.clear_queue();
-    }
-
-    // Clear the filter header cache to rescan the filters for new scripts.
-    pub(crate) fn clear_filters(&mut self) {
-        self.filter_chain.clear_cache();
     }
 }
 

@@ -111,6 +111,7 @@ pub(crate) struct BlockNode {
     pub header: Header,
     pub acc_work: Work,
     pub filter_hash: Option<FilterHash>,
+    pub filter_checked: bool,
 }
 
 impl BlockNode {
@@ -120,6 +121,7 @@ impl BlockNode {
             header,
             acc_work,
             filter_hash: None,
+            filter_checked: false,
         }
     }
 }
@@ -426,6 +428,16 @@ impl BlockTree {
         self.headers.get(hash)?.filter_hash
     }
 
+    pub(crate) fn all_filters_checked(&self) -> bool {
+        self.iter_filters_checked().all(|checked| checked)
+    }
+
+    pub(crate) fn filter_checked(&mut self, hash: BlockHash) {
+        if let Some(data) = self.headers.get_mut(&hash) {
+            data.filter_checked = true
+        }
+    }
+
     pub(crate) fn locators(&self) -> Vec<BlockHash> {
         let mut locators = Vec::new();
         locators.push(self.active_tip.hash);
@@ -446,26 +458,70 @@ impl BlockTree {
         self.headers.len()
     }
 
-    pub(crate) fn iter(&self) -> BlockTreeIterator {
-        BlockTreeIterator {
+    pub(crate) fn iter_headers(&self) -> BlockHeaderIterator {
+        BlockHeaderIterator {
+            block_tree: self,
+            current: self.active_tip.hash,
+        }
+    }
+
+    pub(crate) fn iter_data(&self) -> BlockNodeIterator {
+        BlockNodeIterator {
+            block_tree: self,
+            current: self.active_tip.hash,
+        }
+    }
+
+    pub(crate) fn iter_filters_checked(&self) -> FilterCheckedIterator {
+        FilterCheckedIterator {
             block_tree: self,
             current: self.active_tip.hash,
         }
     }
 }
 
-pub(crate) struct BlockTreeIterator<'a> {
+pub(crate) struct BlockHeaderIterator<'a> {
     block_tree: &'a BlockTree,
     current: BlockHash,
 }
 
-impl Iterator for BlockTreeIterator<'_> {
+impl Iterator for BlockHeaderIterator<'_> {
     type Item = IndexedHeader;
 
     fn next(&mut self) -> Option<Self::Item> {
         let node = self.block_tree.headers.get(&self.current)?;
         self.current = node.header.prev_blockhash;
         Some(IndexedHeader::new(node.height.to_u32(), node.header))
+    }
+}
+
+pub(crate) struct FilterCheckedIterator<'a> {
+    block_tree: &'a BlockTree,
+    current: BlockHash,
+}
+
+impl Iterator for FilterCheckedIterator<'_> {
+    type Item = bool;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let node = self.block_tree.headers.get(&self.current)?;
+        self.current = node.header.prev_blockhash;
+        Some(node.filter_checked)
+    }
+}
+
+pub(crate) struct BlockNodeIterator<'a> {
+    block_tree: &'a BlockTree,
+    current: BlockHash,
+}
+
+impl<'a> Iterator for BlockNodeIterator<'a> {
+    type Item = &'a BlockNode;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let node = self.block_tree.headers.get(&self.current)?;
+        self.current = node.header.prev_blockhash;
+        Some(node)
     }
 }
 
