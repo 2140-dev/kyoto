@@ -46,6 +46,10 @@ tempfile = "3"
 tokio = { version = "1.19", default-features = false, features = [
     "full",
 ] }
+axum = { version = "0.6", features = ["ws"] }
+futures = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 [lib]
 name = "kyoto"
@@ -67,3 +71,7 @@ path = "example/rescan.rs"
 name = "managed"
 path = "example/managed.rs"
 required-features = ["filter-control"]
+
+[[example]]
+name = "mempool"
+path = "example/mempool_ws.rs"
