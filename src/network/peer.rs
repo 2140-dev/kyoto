@@ -15,25 +15,18 @@ use tokio::{
 };
 
 use crate::{
-    network::outbound_messages::V1OutboundMessage,
-    {
-        channel_messages::{MainThreadMessage, PeerMessage, PeerThreadMessage},
-        dialog::Dialog,
-        messages::Warning,
-    },
+    channel_messages::{MainThreadMessage, PeerMessage, PeerThreadMessage},
+    dialog::Dialog,
+    messages::Warning,
 };
 
 use super::{
-    counter::MessageCounter, error::PeerError, parsers::MessageParser, reader::Reader,
-    traits::MessageGenerator, PeerId, PeerTimeoutConfig,
+    counter::MessageCounter, error::PeerError, outbound_messages::MessageGenerator,
+    parsers::MessageParser, reader::Reader, PeerId, PeerTimeoutConfig,
 };
-
-use super::outbound_messages::V2OutboundMessage;
 
 const MESSAGE_TIMEOUT: u64 = 2;
 const HANDSHAKE_TIMEOUT: u64 = 4;
-
-type MutexMessageGenerator = Mutex<Box<dyn MessageGenerator>>;
 
 pub(crate) struct Peer {
     nonce: PeerId,
@@ -91,13 +84,16 @@ impl Peer {
                 self.dialog.send_warning(Warning::CouldNotConnect);
             }
             let (decryptor, encryptor) = handshake_result?;
-            let message_mutex: MutexMessageGenerator =
-                Mutex::new(Box::new(V2OutboundMessage::new(self.network, encryptor)));
+            let message_mutex = Mutex::new(MessageGenerator::V2 {
+                network: self.network,
+                encryptor,
+            });
             let reader = Reader::new(MessageParser::V2(reader, decryptor), tx);
             (message_mutex, reader)
         } else {
-            let outbound_messages = V1OutboundMessage::new(self.network);
-            let message_mutex: MutexMessageGenerator = Mutex::new(Box::new(outbound_messages));
+            let message_mutex = Mutex::new(MessageGenerator::V1 {
+                network: self.network,
+            });
             let reader = Reader::new(MessageParser::V1(reader, self.network), tx);
             (message_mutex, reader)
         };
@@ -179,7 +175,7 @@ impl Peer {
         &mut self,
         message: PeerMessage,
         writer: &mut W,
-        message_generator: &mut Box<dyn MessageGenerator>,
+        message_generator: &mut MessageGenerator,
     ) -> Result<(), PeerError>
     where
         W: AsyncWrite + Send + Unpin,
@@ -318,7 +314,7 @@ impl Peer {
         &mut self,
         request: MainThreadMessage,
         writer: &mut W,
-        message_generator: &mut Box<dyn MessageGenerator>,
+        message_generator: &mut MessageGenerator,
     ) -> Result<(), PeerError>
     where
         W: AsyncWrite + Send + Unpin,

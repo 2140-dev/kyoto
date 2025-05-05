@@ -24,7 +24,6 @@ pub(crate) mod peer_map;
 #[allow(dead_code)]
 pub(crate) mod reader;
 pub(crate) mod socks;
-pub(crate) mod traits;
 
 pub const PROTOCOL_VERSION: u32 = 70016;
 pub const KYOTO_VERSION: &str = "0.10.0";
