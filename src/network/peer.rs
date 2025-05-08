@@ -1,7 +1,7 @@
 extern crate tokio;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use bip324::{AsyncProtocol, PacketReader, PacketWriter, Role};
+use bip324::{AsyncProtocol, AsyncProtocolReader, PacketWriter, Role};
 use bitcoin::{p2p::ServiceFlags, Network, Transaction, Wtxid};
 use tokio::{
     io::{AsyncRead, AsyncWrite, AsyncWriteExt},
@@ -387,7 +387,7 @@ impl Peer {
         &mut self,
         writer: &mut W,
         reader: &mut R,
-    ) -> Result<(PacketReader, PacketWriter), PeerError>
+    ) -> Result<(AsyncProtocolReader, PacketWriter), PeerError>
     where
         W: AsyncWrite + Send + Unpin,
         R: AsyncRead + Send + Unpin,
@@ -402,7 +402,7 @@ impl Peer {
             Ok(proto) => {
                 crate::log!(self.dialog, "Established an encrypted connection");
                 let (reader, writer) = proto.into_split();
-                Ok((reader.decoder(), writer.encoder()))
+                Ok((reader, writer.encoder()))
             }
             Err(e) => {
                 crate::log!(

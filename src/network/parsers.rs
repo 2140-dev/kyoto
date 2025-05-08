@@ -1,5 +1,5 @@
 use bip324::serde::NetworkMessage;
-use bip324::{PacketReader, PacketType};
+use bip324::{AsyncProtocolReader, PacketType};
 use bitcoin::consensus::{deserialize, deserialize_partial};
 use bitcoin::p2p::message::RawNetworkMessage;
 use bitcoin::Network;
@@ -11,7 +11,7 @@ use super::V1Header;
 const MAX_MESSAGE_BYTES: u32 = 1024 * 1024 * 32;
 
 pub(crate) enum MessageParser<R: AsyncReadExt + Send + Sync + Unpin> {
-    V2(R, PacketReader),
+    V2(R, AsyncProtocolReader),
     V1(R, Network),
 }
 
@@ -19,23 +19,18 @@ impl<R: AsyncReadExt + Send + Sync + Unpin> MessageParser<R> {
     pub async fn read_message(&mut self) -> Result<Option<NetworkMessage>, PeerReadError> {
         match self {
             MessageParser::V2(stream, decryptor) => {
-                let mut len_buf = [0; 3];
-                let _ = stream
-                    .read_exact(&mut len_buf)
+                let msg = decryptor
+                    .read_and_decrypt(stream)
                     .await
-                    .map_err(|_| PeerReadError::ReadBuffer)?;
-                let message_len = decryptor.decypt_len(len_buf);
-                if message_len > MAX_MESSAGE_BYTES as usize {
+                    .map_err(|e| match e {
+                        bip324::ProtocolError::Io(_, _) => PeerReadError::ReadBuffer,
+                        bip324::ProtocolError::Internal(_) => PeerReadError::DecryptionFailed,
+                    })?;
+
+                if msg.contents().len() > MAX_MESSAGE_BYTES as usize {
                     return Err(PeerReadError::TooManyMessages);
                 }
-                let mut response_message = vec![0; message_len];
-                let _ = stream
-                    .read_exact(&mut response_message)
-                    .await
-                    .map_err(|_| PeerReadError::ReadBuffer)?;
-                let msg = decryptor
-                    .decrypt_payload(&response_message, None)
-                    .map_err(|_| PeerReadError::DecryptionFailed)?;
+
                 match msg.packet_type() {
                     PacketType::Genuine => {
                         let parsed = bip324::serde::deserialize(msg.contents())
@@ -60,7 +55,7 @@ impl<R: AsyncReadExt + Send + Sync + Unpin> MessageParser<R> {
                 }
                 // Message is too long
                 if header.length > MAX_MESSAGE_BYTES {
-                    return Err(PeerReadError::Deserialization);
+                    return Err(PeerReadError::TooManyMessages);
                 }
                 let mut contents_buf = vec![0_u8; header.length as usize];
                 let _ = stream
