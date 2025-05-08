@@ -27,7 +27,6 @@ impl core::fmt::Display for PeerReadError {
 
 impl_sourceless_error!(PeerReadError);
 
-// TODO: (@leonardo) Should the error variants wrap inner errors for richer information ?
 #[derive(Debug)]
 pub(crate) enum PeerError {
     ConnectionFailed,
