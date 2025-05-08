@@ -12,9 +12,6 @@ use crate::messages::RejectPayload;
 use super::error::PeerReadError;
 use super::parsers::MessageParser;
 
-const ONE_MONTH: u64 = 2_500_000;
-const ONE_MINUTE: u64 = 60;
-const MAX_MESSAGE_BYTES: u32 = 1024 * 1024 * 32;
 // From Bitcoin Core PR #29575
 const MAX_ADDR: usize = 1_000;
 const MAX_INV: usize = 50_000;

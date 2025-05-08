@@ -6,7 +6,6 @@ pub(crate) enum PeerReadError {
     Deserialization,
     DecryptionFailed,
     TooManyMessages,
-    PeerTimeout,
     MpscChannel,
 }
 
@@ -18,7 +17,6 @@ impl core::fmt::Display for PeerReadError {
                 write!(f, "the message could not be properly deserialized.")
             }
             PeerReadError::TooManyMessages => write!(f, "DOS protection."),
-            PeerReadError::PeerTimeout => write!(f, "peer timeout."),
             PeerReadError::MpscChannel => write!(f, "sending over the channel failed."),
             PeerReadError::DecryptionFailed => write!(f, "decrypting a message failed."),
         }
@@ -27,7 +25,6 @@ impl core::fmt::Display for PeerReadError {
 
 impl_sourceless_error!(PeerReadError);
 
-// TODO: (@leonardo) Should the error variants wrap inner errors for richer information ?
 #[derive(Debug)]
 pub(crate) enum PeerError {
     ConnectionFailed,

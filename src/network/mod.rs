@@ -15,13 +15,11 @@ use error::PeerError;
 
 pub(crate) mod counter;
 pub(crate) mod dns;
-#[allow(dead_code)]
 pub(crate) mod error;
 pub(crate) mod outbound_messages;
 pub(crate) mod parsers;
 pub(crate) mod peer;
 pub(crate) mod peer_map;
-#[allow(dead_code)]
 pub(crate) mod reader;
 pub(crate) mod socks;
 
