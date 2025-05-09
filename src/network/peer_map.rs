@@ -21,7 +21,7 @@ use tokio::{
 
 use crate::{
     chain::HeightMonitor,
-    channel_messages::{CombinedAddr, MainThreadMessage, PeerThreadMessage},
+    channel_messages::{MainThreadMessage, PeerThreadMessage},
     db::{traits::PeerStore, PeerStatus, PersistedPeer},
     dialog::Dialog,
     error::PeerManagerError,
@@ -51,7 +51,7 @@ pub(crate) struct ManagedPeer {
 
 // The `PeerMap` manages connections with peers, adds and bans peers, and manages the peer database
 #[derive(Debug)]
-pub(crate) struct PeerMap<P: PeerStore> {
+pub(crate) struct PeerMap<P: PeerStore + 'static> {
     current_id: PeerId,
     heights: Arc<Mutex<HeightMonitor>>,
     network: Network,
@@ -162,6 +162,7 @@ impl<P: PeerStore> PeerMap<P> {
             prx,
             loaded_peer.services,
             Arc::clone(&self.dialog),
+            Arc::clone(&self.db),
             self.timeout_config,
         );
         if !self.connector.can_connect(&loaded_peer.addr) {
@@ -304,29 +305,6 @@ impl<P: PeerStore> PeerMap<P> {
                 let mut db = self.db.lock().await;
                 let num_unbanned = db.num_unbanned().await?;
                 Ok(num_unbanned < limit)
-            }
-        }
-    }
-
-    // Add peers to the database that were gossiped over the p2p network
-    pub async fn add_gossiped_peers(&mut self, peers: Vec<CombinedAddr>) {
-        let mut db = self.db.lock().await;
-        for peer in peers {
-            if let Err(e) = db
-                .update(PersistedPeer::new(
-                    peer.addr.clone(),
-                    peer.port,
-                    peer.services,
-                    PeerStatus::Gossiped,
-                ))
-                .await
-            {
-                self.dialog.send_warning(Warning::FailedPersistence {
-                    warning: format!(
-                        "Encountered an error adding {:?}:{} flags: {} ... {e}",
-                        peer.addr, peer.port, peer.services
-                    ),
-                });
             }
         }
     }

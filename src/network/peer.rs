@@ -7,15 +7,19 @@ use tokio::{
     io::{AsyncRead, AsyncWrite, AsyncWriteExt},
     net::TcpStream,
     select,
-    sync::mpsc::{self, Receiver, Sender},
+    sync::{
+        mpsc::{self, Receiver, Sender},
+        Mutex,
+    },
     time::Instant,
 };
 
 use crate::{
-    channel_messages::{MainThreadMessage, PeerMessage, PeerThreadMessage},
+    channel_messages::{CombinedAddr, MainThreadMessage, PeerMessage, PeerThreadMessage},
+    db::{PeerStatus, PersistedPeer},
     dialog::Dialog,
     messages::Warning,
-    Info,
+    Info, PeerStore,
 };
 
 use super::{
@@ -29,8 +33,9 @@ use super::{
 
 const MESSAGE_TIMEOUT: u64 = 2;
 const HANDSHAKE_TIMEOUT: u64 = 4;
+const PEERS_GOSSIPED_TASK_THRESHOLD: usize = 10;
 
-pub(crate) struct Peer {
+pub(crate) struct Peer<P: PeerStore + 'static> {
     nonce: PeerId,
     main_thread_sender: Sender<PeerThreadMessage>,
     main_thread_recv: Receiver<MainThreadMessage>,
@@ -38,11 +43,13 @@ pub(crate) struct Peer {
     message_counter: MessageCounter,
     services: ServiceFlags,
     dialog: Arc<Dialog>,
+    db: Arc<Mutex<P>>,
     timeout_config: PeerTimeoutConfig,
     tx_queue: HashMap<Wtxid, Transaction>,
 }
 
-impl Peer {
+impl<P: PeerStore + 'static> Peer<P> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         nonce: PeerId,
         network: Network,
@@ -50,6 +57,7 @@ impl Peer {
         main_thread_recv: Receiver<MainThreadMessage>,
         services: ServiceFlags,
         dialog: Arc<Dialog>,
+        db: Arc<Mutex<P>>,
         timeout_config: PeerTimeoutConfig,
     ) -> Self {
         let message_counter = MessageCounter::new(timeout_config.response_timeout);
@@ -61,6 +69,7 @@ impl Peer {
             message_counter,
             services,
             dialog,
+            db,
             timeout_config,
             tx_queue: HashMap::new(),
         }
@@ -195,13 +204,8 @@ impl Peer {
             }
             PeerMessage::Addr(addrs) => {
                 self.message_counter.got_addrs(addrs.len());
-                self.main_thread_sender
-                    .send(PeerThreadMessage {
-                        nonce: self.nonce,
-                        message: PeerMessage::Addr(addrs),
-                    })
-                    .await
-                    .map_err(|_| PeerError::ThreadChannel)?;
+                Self::add_gossiped_peers(Arc::clone(&self.dialog), Arc::clone(&self.db), addrs)
+                    .await;
                 Ok(())
             }
             PeerMessage::Headers(headers) => {
@@ -411,6 +415,54 @@ impl Peer {
                 );
                 Err(PeerError::HandshakeFailed)
             }
+        }
+    }
+
+    async fn add_gossiped_peers(dialog: Arc<Dialog>, db: Arc<Mutex<P>>, peers: Vec<CombinedAddr>) {
+        let len = peers.len();
+        crate::log!(dialog, format!("Adding {len} gossiped peers"));
+        if len < PEERS_GOSSIPED_TASK_THRESHOLD {
+            let mut db = db.lock().await;
+            for peer in peers {
+                if let Err(e) = db
+                    .update(PersistedPeer::new(
+                        peer.addr.clone(),
+                        peer.port,
+                        peer.services,
+                        PeerStatus::Gossiped,
+                    ))
+                    .await
+                {
+                    dialog.send_warning(Warning::FailedPersistence {
+                        warning: format!(
+                            "Encountered an error adding {:?}:{} flags: {} ... {e}",
+                            peer.addr, peer.port, peer.services
+                        ),
+                    });
+                }
+            }
+        } else {
+            tokio::task::spawn(async move {
+                let mut db = db.lock().await;
+                for peer in peers {
+                    if let Err(e) = db
+                        .update(PersistedPeer::new(
+                            peer.addr.clone(),
+                            peer.port,
+                            peer.services,
+                            PeerStatus::Gossiped,
+                        ))
+                        .await
+                    {
+                        dialog.send_warning(Warning::FailedPersistence {
+                            warning: format!(
+                                "Encountered an error adding {:?}:{} flags: {} ... {e}",
+                                peer.addr, peer.port, peer.services
+                            ),
+                        });
+                    }
+                }
+            });
         }
     }
 }
