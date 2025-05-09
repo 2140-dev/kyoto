@@ -13,7 +13,7 @@ use bitcoin::{
 use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 use tokio::{
     sync::{
-        mpsc::{self, Sender},
+        mpsc::{self, Receiver, Sender},
         Mutex,
     },
     task::JoinHandle,
@@ -51,7 +51,7 @@ pub(crate) struct ManagedPeer {
 
 // The `PeerMap` manages connections with peers, adds and bans peers, and manages the peer database
 #[derive(Debug)]
-pub(crate) struct PeerMap<P: PeerStore> {
+pub(crate) struct PeerMap<P: PeerStore + 'static> {
     current_id: PeerId,
     heights: Arc<Mutex<HeightMonitor>>,
     network: Network,
@@ -65,6 +65,8 @@ pub(crate) struct PeerMap<P: PeerStore> {
     net_groups: HashSet<String>,
     timeout_config: PeerTimeoutConfig,
     dns_resolver: DnsResolver,
+    gossip_tx: Sender<Vec<CombinedAddr>>,
+    gossip_rx: Option<Receiver<Vec<CombinedAddr>>>,
 }
 
 #[allow(dead_code)]
@@ -82,13 +84,16 @@ impl<P: PeerStore> PeerMap<P> {
         height_monitor: Arc<Mutex<HeightMonitor>>,
         dns_resolver: DnsResolver,
     ) -> Self {
+        let db = Arc::new(Mutex::new(db));
+        let (gossip_tx, gossip_rx) = mpsc::channel::<Vec<CombinedAddr>>(100);
+
         Self {
             current_id: PeerId(0),
             heights: height_monitor,
             network,
             mtx,
             map: HashMap::new(),
-            db: Arc::new(Mutex::new(db)),
+            db,
             connector: connection_type,
             whitelist,
             dialog,
@@ -96,6 +101,39 @@ impl<P: PeerStore> PeerMap<P> {
             net_groups: HashSet::new(),
             timeout_config,
             dns_resolver,
+            gossip_tx,
+            gossip_rx: Some(gossip_rx),
+        }
+    }
+
+    pub fn initialize(&mut self) {
+        if let Some(mut gossip_rx) = self.gossip_rx.take() {
+            let gossip_db = Arc::clone(&self.db);
+            let gossip_dialog = Arc::clone(&self.dialog);
+
+            tokio::spawn(async move {
+                while let Some(peers) = gossip_rx.recv().await {
+                    let mut db = gossip_db.lock().await;
+                    for peer in peers {
+                        if let Err(e) = db
+                            .update(PersistedPeer::new(
+                                peer.addr.clone(),
+                                peer.port,
+                                peer.services,
+                                PeerStatus::Gossiped,
+                            ))
+                            .await
+                        {
+                            gossip_dialog.send_warning(Warning::FailedPersistence {
+                                warning: format!(
+                                    "Encountered an error adding {:?}:{} flags: {} ... {e}",
+                                    peer.addr, peer.port, peer.services
+                                ),
+                            });
+                        }
+                    }
+                }
+            });
         }
     }
 
@@ -155,6 +193,7 @@ impl<P: PeerStore> PeerMap<P> {
     pub async fn dispatch(&mut self, loaded_peer: PersistedPeer) -> Result<(), PeerError> {
         let (ptx, prx) = mpsc::channel::<MainThreadMessage>(32);
         self.current_id.increment();
+        let gossip_tx = self.gossip_tx.clone();
         let mut peer = Peer::new(
             self.current_id,
             self.network,
@@ -163,6 +202,7 @@ impl<P: PeerStore> PeerMap<P> {
             loaded_peer.services,
             Arc::clone(&self.dialog),
             self.timeout_config,
+            gossip_tx,
         );
         if !self.connector.can_connect(&loaded_peer.addr) {
             return Err(PeerError::UnreachableSocketAddr);
@@ -304,29 +344,6 @@ impl<P: PeerStore> PeerMap<P> {
                 let mut db = self.db.lock().await;
                 let num_unbanned = db.num_unbanned().await?;
                 Ok(num_unbanned < limit)
-            }
-        }
-    }
-
-    // Add peers to the database that were gossiped over the p2p network
-    pub async fn add_gossiped_peers(&mut self, peers: Vec<CombinedAddr>) {
-        let mut db = self.db.lock().await;
-        for peer in peers {
-            if let Err(e) = db
-                .update(PersistedPeer::new(
-                    peer.addr.clone(),
-                    peer.port,
-                    peer.services,
-                    PeerStatus::Gossiped,
-                ))
-                .await
-            {
-                self.dialog.send_warning(Warning::FailedPersistence {
-                    warning: format!(
-                        "Encountered an error adding {:?}:{} flags: {} ... {e}",
-                        peer.addr, peer.port, peer.services
-                    ),
-                });
             }
         }
     }

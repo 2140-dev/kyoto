@@ -12,7 +12,7 @@ use tokio::{
 };
 
 use crate::{
-    channel_messages::{MainThreadMessage, PeerMessage, PeerThreadMessage},
+    channel_messages::{CombinedAddr, MainThreadMessage, PeerMessage, PeerThreadMessage},
     dialog::Dialog,
     messages::Warning,
     Info,
@@ -40,9 +40,11 @@ pub(crate) struct Peer {
     dialog: Arc<Dialog>,
     timeout_config: PeerTimeoutConfig,
     tx_queue: HashMap<Wtxid, Transaction>,
+    gossip_tx: Sender<Vec<CombinedAddr>>,
 }
 
 impl Peer {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         nonce: PeerId,
         network: Network,
@@ -51,6 +53,7 @@ impl Peer {
         services: ServiceFlags,
         dialog: Arc<Dialog>,
         timeout_config: PeerTimeoutConfig,
+        gossip_tx: Sender<Vec<CombinedAddr>>,
     ) -> Self {
         let message_counter = MessageCounter::new(timeout_config.response_timeout);
         Self {
@@ -63,6 +66,7 @@ impl Peer {
             dialog,
             timeout_config,
             tx_queue: HashMap::new(),
+            gossip_tx,
         }
     }
 
@@ -195,13 +199,9 @@ impl Peer {
             }
             PeerMessage::Addr(addrs) => {
                 self.message_counter.got_addrs(addrs.len());
-                self.main_thread_sender
-                    .send(PeerThreadMessage {
-                        nonce: self.nonce,
-                        message: PeerMessage::Addr(addrs),
-                    })
-                    .await
-                    .map_err(|_| PeerError::ThreadChannel)?;
+                if let Err(e) = self.gossip_tx.send(addrs).await {
+                    crate::log!(self.dialog, format!("Failed to send gossiped peers: {}", e));
+                }
                 Ok(())
             }
             PeerMessage::Headers(headers) => {
