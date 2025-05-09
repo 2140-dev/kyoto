@@ -549,6 +549,7 @@ async fn signet_syncs() {
         .log_level(LogLevel::Info)
         .build()
         .unwrap();
+    let start_time = std::time::Instant::now();
     tokio::task::spawn(async move { node.run().await });
     async fn print_and_sync(mut client: Client) {
         loop {
@@ -575,4 +576,6 @@ async fn signet_syncs() {
     }
     let timeout = tokio::time::timeout(Duration::from_secs(180), print_and_sync(client)).await;
     assert!(timeout.is_ok());
+    let elapsed = start_time.elapsed();
+    println!("Signet sync completed in {elapsed:.2?}");
 }

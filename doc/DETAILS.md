@@ -1,8 +1,8 @@
 # Description
 
-While [Neutrino](https://github.com/lightninglabs/neutrino/blob/master) is the standard SPV for [LND](https://github.com/lightningnetwork/lnd), integrations with existing Rust clients for [LDK](https://github.com/lightningdevkit) and [BDK](https://github.com/bitcoindevkit) haven't come to furition. The [Nakamoto](https://github.com/cloudhead/nakamoto) project is complete with some very modular, elegant programming, but the lead maintainer has other projects to focus on. [Murmel](https://github.com/rust-bitcoin/murmel) is yet another light client in Rust, but the last commit was 4 years ago at the time of writing. The Rust community of crates has evolved quickly in terms of asynchronous frameworks and runtime executors. Like the [LDK node](https://github.com/lightningdevkit/ldk-node?tab=readme-ov-file) project, this project leverages the use of `tokio`. By leveraging how futures and executors have developed over the years, the hope is a light client in Rust should be significantly easier to maintain.
+While [Neutrino](https://github.com/lightninglabs/neutrino/blob/master) is the standard SPV for [LND](https://github.com/lightningnetwork/lnd), integrations with existing Rust clients for [LDK](https://github.com/lightningdevkit) and [BDK](https://github.com/bitcoindevkit) haven't come to fruition. The [Nakamoto](https://github.com/cloudhead/nakamoto) project is complete with some very modular, elegant programming, but the lead maintainer has other projects to focus on. [Murmel](https://github.com/rust-bitcoin/murmel) is yet another light client in Rust, but the last commit was 4 years ago at the time of writing. The Rust community of crates has evolved quickly in terms of asynchronous frameworks and runtime executors. Like the [LDK node](https://github.com/lightningdevkit/ldk-node?tab=readme-ov-file) project, this project leverages the use of `tokio`. By leveraging how futures and executors have developed over the years, the hope is a light client in Rust should be significantly easier to maintain.
 
-This document outlines some miscellaneous information about the project and some recommendations for implementation. The goal for Kyoto is to run on mobile devices with a low-enough memory footprint to allow users to interact with Lightning Network applications as well. To that end, some assumptions and design goals were made to cater to low-resource devices. Neutrino and LND are the current standard of a server-style, SPV Lightning Node implementation, so Kyoto is generally compliment and not a substitution.
+This document outlines some miscellaneous information about the project and some recommendations for implementation. The goal for Kyoto is to run on mobile devices with a low-enough memory footprint to allow users to interact with Lightning Network applications as well. To that end, some assumptions and design goals were made to cater to low-resource devices. Neutrino and LND are the current standard of server-style, SPV Lightning Node implementation, so Kyoto is generally compliment and not a substitution.
 
 Some lower-level architecture decisions are documented in a blog series over at [blog.yonson.dev](https://blog.yonson.dev/series/kyoto/).
 
@@ -29,19 +29,21 @@ Under the assumption that only a few connections should be maintained, broadcast
 
 ### Runtime
 
-Kyoto does not require a large memory overhead like a modern video game for instance. From experience in experimentation, Kyoto is able to perform well with a single operating system thread which spawns a _multithreaded_ `tokio` runtime. The runtime must be multithreaded as Kyoto internally uses `tokio::task::spawn`, however, there is no limitation in first using `std::thread::spawn` and building a `tokio` multithreaded runtime within that handle.
+Kyoto exposes two components, `node` and `client`, which have different runtime requirements.
+
+1. **`Node`** Requires a tokio runtime since it internally uses the `tokio::task::spawn` hook. So the `node.run()` method must run within a tokio runtime context. The standard multithread runtime is recommended for best performance.
 
 ```rust
-std::thread::spawn(|| {
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(async move {
-            node.run().await;
-        })
-});
+tokio::runtime::Builder::new_multi_thread()
+    .enable_all()
+    .build()
+    .unwrap()
+    .block_on(async move {
+        node.run().await;
+    })
 ```
+
+2. **`Client`** Provides async functions that must be executed within some async runtime, but it doesn't rely on tokio-specific features like `tokio::task::spawn`. This means the client can be used with any async runtime (tokio, async-std, etc.) or even a minimal future executor.
 
 ### Hosting a Full Archival Node
 

@@ -109,10 +109,10 @@ impl Progress {
         }
     }
 
-    /// The total progress represented as a fraction.
+    /// The sync progress as a percentage.
     pub fn percentage_complete(&self) -> f32 {
         let total = (2 * self.total_to_check) as f32;
-        (self.filter_headers + self.filters) as f32 / total
+        (self.filter_headers + self.filters) as f32 / total * 100.0
     }
 }
 
