@@ -31,6 +31,10 @@ async fn main() {
         .after_checkpoint(checkpoint)
         // The number of connections we would like to maintain
         .required_peers(2)
+        // Random resolver pulled from: https://public-dns.info/nameservers.txt
+        .dns_resolver([185, 220, 182, 179])
+        // Query the DNS resolver on every sync. Read more about the traeoffs in the documentation.
+        .force_dns_seeding()
         // Create the node and client
         .build()
         .unwrap();

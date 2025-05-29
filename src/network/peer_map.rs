@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
+    net::IpAddr,
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -26,12 +27,12 @@ use crate::{
     db::{traits::PeerStore, PeerStatus, PersistedPeer},
     dialog::Dialog,
     error::PeerManagerError,
-    network::{dns::DnsResolver, error::PeerError, peer::Peer, PeerId, PeerTimeoutConfig},
+    network::{dns::Dns, error::PeerError, peer::Peer, PeerId, PeerTimeoutConfig},
     prelude::{default_port_from_network, Median, Netgroup},
     PeerStoreSizeConfig, TrustedPeer, Warning,
 };
 
-use super::ConnectionType;
+use super::{dns::DnsConfig, ConnectionType};
 
 const MAX_TRIES: usize = 50;
 
@@ -66,7 +67,7 @@ pub(crate) struct PeerMap<P: PeerStore + 'static> {
     target_db_size: PeerStoreSizeConfig,
     net_groups: HashSet<String>,
     timeout_config: PeerTimeoutConfig,
-    dns_resolver: DnsResolver,
+    dns_config: DnsConfig,
 }
 
 #[allow(dead_code)]
@@ -82,7 +83,7 @@ impl<P: PeerStore> PeerMap<P> {
         target_db_size: PeerStoreSizeConfig,
         timeout_config: PeerTimeoutConfig,
         height_monitor: Arc<Mutex<HeightMonitor>>,
-        dns_resolver: DnsResolver,
+        dns_config: DnsConfig,
     ) -> Self {
         Self {
             tx_queue: Arc::new(Mutex::new(BroadcastQueue::new())),
@@ -98,7 +99,7 @@ impl<P: PeerStore> PeerMap<P> {
             target_db_size,
             net_groups: HashSet::new(),
             timeout_config,
-            dns_resolver,
+            dns_config,
         }
     }
 
@@ -275,14 +276,6 @@ impl<P: PeerStore> PeerMap<P> {
                 PersistedPeer::new(peer.address, port, peer.known_services, PeerStatus::Tried);
             return Ok(peer);
         }
-        let current_count = {
-            let mut peer_manager = self.db.lock().await;
-            peer_manager.num_unbanned().await?
-        };
-        if current_count < 1 {
-            self.dialog.send_warning(Warning::EmptyPeerDatabase);
-            self.bootstrap().await?;
-        }
         let mut peer_manager = self.db.lock().await;
         let mut tries = 0;
         let desired_status = PeerStatus::random();
@@ -359,35 +352,51 @@ impl<P: PeerStore> PeerMap<P> {
         }
     }
 
-    async fn bootstrap(&mut self) -> Result<(), PeerManagerError<P::Error>> {
-        use crate::network::dns::Dns;
-        use std::net::IpAddr;
-        crate::log!(self.dialog, "Bootstrapping peers with DNS");
+    pub(crate) async fn bootstrap(&mut self) -> Result<(), PeerManagerError<P::Error>> {
         let mut db_lock = self.db.lock().await;
-        let new_peers = Dns::new(self.network, self.dns_resolver)
-            .bootstrap()
-            .await
-            .into_iter()
-            .map(|ip| match ip {
-                IpAddr::V4(ip) => AddrV2::Ipv4(ip),
-                IpAddr::V6(ip) => AddrV2::Ipv6(ip),
-            })
-            .collect::<Vec<AddrV2>>();
-        crate::log!(
-            self.dialog,
-            format!("Adding {} sourced from DNS", new_peers.len())
-        );
-        for peer in new_peers {
-            db_lock
-                .update(PersistedPeer::new(
-                    peer,
-                    default_port_from_network(&self.network),
-                    ServiceFlags::NONE,
-                    PeerStatus::Gossiped,
-                ))
+        let current_count = db_lock.num_unbanned().await?;
+        if current_count == 0 && self.whitelist.is_empty() {
+            crate::log!(self.dialog, "Bootstrapping peers with DNS");
+            let new_peers = Dns::new(self.network, self.dns_config.resolver)
+                .bootstrap()
                 .await
-                .map_err(PeerManagerError::Database)?;
+                .into_iter()
+                .map(|ip| match ip {
+                    IpAddr::V4(ip) => AddrV2::Ipv4(ip),
+                    IpAddr::V6(ip) => AddrV2::Ipv6(ip),
+                })
+                .collect::<Vec<AddrV2>>();
+            crate::log!(
+                self.dialog,
+                format!("Adding {} sourced from DNS", new_peers.len())
+            );
+            for peer in new_peers {
+                db_lock
+                    .update(PersistedPeer::new(
+                        peer,
+                        default_port_from_network(&self.network),
+                        ServiceFlags::NONE,
+                        PeerStatus::Gossiped,
+                    ))
+                    .await
+                    .map_err(PeerManagerError::Database)?;
+            }
+            return Ok(());
         }
+        if self.dns_config.force_seeding {
+            crate::log!(self.dialog, "Using DNS as peer source");
+            let new_peers = Dns::random(self.network, self.dns_config.resolver)
+                .bootstrap()
+                .await
+                .into_iter()
+                .map(From::from);
+            crate::log!(
+                self.dialog,
+                format!("Adding {} sourced from DNS", new_peers.len())
+            );
+            self.whitelist.extend(new_peers);
+            return Ok(());
+        };
         Ok(())
     }
 }

@@ -198,7 +198,18 @@ impl NodeBuilder {
     pub fn dns_resolver(mut self, resolver: impl Into<IpAddr>) -> Self {
         let ip_addr = resolver.into();
         let socket_addr = SocketAddr::new(ip_addr, DNS_RESOLVER_PORT);
-        self.config.dns_resolver = DnsResolver { socket_addr };
+        self.config.dns_config.resolver = DnsResolver { socket_addr };
+        self
+    }
+
+    /// Seed initial peers with DNS, even if there are peers available on disk.
+    ///
+    /// There is an implicit trust tradeoff when using this feature. The DNS seeds are trusted to
+    /// respond with good bitcoin nodes, whereas relying on local storage does not rely on trust.
+    /// This feature should be used with care, and may only be appropriate for certain use-cases
+    /// that do not shut down frequently.
+    pub fn force_dns_seeding(mut self) -> Self {
+        self.config.dns_config.force_seeding = true;
         self
     }
 

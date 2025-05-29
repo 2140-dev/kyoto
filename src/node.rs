@@ -69,7 +69,7 @@ impl<H: HeaderStore, P: PeerStore> Node<H, P> {
         let NodeConfig {
             required_peers,
             white_list,
-            dns_resolver,
+            dns_config,
             addresses,
             data_path: _,
             header_checkpoint,
@@ -102,7 +102,7 @@ impl<H: HeaderStore, P: PeerStore> Node<H, P> {
             target_peer_size,
             peer_timeout_config,
             Arc::clone(&height_monitor),
-            dns_resolver,
+            dns_config,
         )));
         // Prepare the header checkpoints for the chain source
         let mut checkpoints = HeaderCheckpoints::new(&network);
@@ -149,6 +149,10 @@ impl<H: HeaderStore, P: PeerStore> Node<H, P> {
             )
         );
         self.fetch_headers().await?;
+        {
+            let mut map = self.peer_map.lock().await;
+            map.bootstrap().await?;
+        }
         let mut last_block = LastBlockMonitor::new();
         let mut peer_recv = self.peer_recv.lock().await;
         let mut client_recv = self.client_recv.lock().await;

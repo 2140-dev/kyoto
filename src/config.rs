@@ -4,7 +4,7 @@ use bitcoin::ScriptBuf;
 
 use crate::{
     chain::checkpoints::HeaderCheckpoint,
-    network::{dns::DnsResolver, ConnectionType},
+    network::{dns::DnsConfig, ConnectionType},
     LogLevel, PeerStoreSizeConfig, PeerTimeoutConfig, TrustedPeer,
 };
 
@@ -13,7 +13,7 @@ const REQUIRED_PEERS: u8 = 1;
 pub(crate) struct NodeConfig {
     pub required_peers: u8,
     pub white_list: Vec<TrustedPeer>,
-    pub dns_resolver: DnsResolver,
+    pub dns_config: DnsConfig,
     pub addresses: HashSet<ScriptBuf>,
     pub data_path: Option<PathBuf>,
     pub header_checkpoint: Option<HeaderCheckpoint>,
@@ -28,7 +28,7 @@ impl Default for NodeConfig {
         Self {
             required_peers: REQUIRED_PEERS,
             white_list: Default::default(),
-            dns_resolver: DnsResolver::default(),
+            dns_config: DnsConfig::default(),
             addresses: Default::default(),
             data_path: Default::default(),
             header_checkpoint: Default::default(),
