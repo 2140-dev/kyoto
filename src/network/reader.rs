@@ -104,7 +104,7 @@ impl<R: AsyncReadExt + Send + Sync + Unpin> Reader<R> {
             NetworkMessage::GetBlocks(_) => None,
             NetworkMessage::GetHeaders(_) => None,
             NetworkMessage::MemPool => None,
-            NetworkMessage::Tx(_) => None,
+            NetworkMessage::Tx(transaction) => Some(ReaderMessage::Tx(transaction)),
             NetworkMessage::Block(block) => Some(ReaderMessage::Block(block)),
             NetworkMessage::Headers(headers) => {
                 if headers.len() > MAX_HEADERS {

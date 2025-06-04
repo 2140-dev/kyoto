@@ -30,7 +30,7 @@ use super::{
     outbound_messages::{MessageGenerator, Transport},
     parsers::MessageParser,
     reader::Reader,
-    AddrGossipStages, MessageState, PeerId, PeerTimeoutConfig,
+    AddrGossipStages, MessageState, PeerId, PeerTimeoutConfig, TxRequestState,
 };
 
 const LOOP_TIMEOUT: Duration = Duration::from_secs(2);
@@ -319,6 +319,29 @@ impl<P: PeerStore + 'static> Peer<P> {
                 }
                 Ok(())
             }
+            ReaderMessage::Tx(transaction) => {
+                match &mut self.message_state.tx_request_state {
+                    TxRequestState::Idle => {
+                        crate::log!(self.dialog, "Unexpected transaction message");
+                        self.dialog.send_warning(Warning::UnsolicitedMessage);
+                        return Err(PeerError::DisconnectCommand);
+                    }
+                    TxRequestState::Fetching { sender, txids } => {
+                        let txid = transaction.compute_txid();
+                        let did_request = txids.remove(&txid);
+                        if !did_request {
+                            crate::log!(self.dialog, "Unexpected transaction message");
+                            self.dialog.send_warning(Warning::UnsolicitedMessage);
+                            return Err(PeerError::DisconnectCommand);
+                        }
+                        let _ = sender.send((txid, transaction)).await;
+                        if txids.is_empty() {
+                            self.message_state.tx_request_state = TxRequestState::Idle;
+                        }
+                    }
+                }
+                Ok(())
+            }
             ReaderMessage::Verack => {
                 if self.message_state.version_handshake.is_complete() {
                     return Err(PeerError::DisconnectCommand);
@@ -401,6 +424,14 @@ impl<P: PeerStore + 'static> Peer<P> {
             MainThreadMessage::GetBlock(message) => {
                 let message = message_generator.block(message)?;
                 self.write_bytes(writer, message).await?;
+            }
+            MainThreadMessage::FetchTransactions(fetch) => {
+                let message = message_generator.fetch_txs(fetch.txids.clone())?;
+                self.write_bytes(writer, message).await?;
+                self.message_state.tx_request_state = TxRequestState::Fetching {
+                    sender: fetch.sender,
+                    txids: fetch.txids,
+                }
             }
             MainThreadMessage::BroadcastPending => {
                 // The peer will drop these on the floor if the handshake is not complete

@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use bitcoin::{
     block::Header,
     hashes::Hash,
@@ -7,8 +9,9 @@ use bitcoin::{
         message_network::VersionMessage,
         ServiceFlags,
     },
-    Block, BlockHash, FeeRate, Wtxid,
+    Block, BlockHash, FeeRate, Transaction, Txid, Wtxid,
 };
+use tokio::sync::mpsc;
 use tokio::time::Instant;
 
 use crate::{messages::RejectPayload, network::PeerId};
@@ -22,6 +25,7 @@ pub(crate) enum MainThreadMessage {
     GetFilterHeaders(GetCFHeaders),
     GetFilters(GetCFilters),
     GetBlock(GetBlockConfig),
+    FetchTransactions(FetchTransactions),
     Disconnect,
     BroadcastPending,
     Verack,
@@ -57,6 +61,18 @@ pub struct GetBlockConfig {
     pub locator: BlockHash,
 }
 
+#[derive(Debug, Clone)]
+pub struct FetchTransactions {
+    pub sender: mpsc::Sender<(Txid, Transaction)>,
+    pub txids: HashSet<Txid>,
+}
+
+impl FetchTransactions {
+    pub fn new(sender: mpsc::Sender<(Txid, Transaction)>, txids: HashSet<Txid>) -> Self {
+        Self { sender, txids }
+    }
+}
+
 pub(crate) struct PeerThreadMessage {
     pub nonce: PeerId,
     pub message: PeerMessage,
@@ -81,6 +97,7 @@ pub(crate) enum ReaderMessage {
     FilterHeaders(CFHeaders),
     Filter(CFilter),
     Block(Block),
+    Tx(Transaction),
     NewBlocks(Vec<BlockHash>),
     Reject(RejectPayload),
     Disconnect,

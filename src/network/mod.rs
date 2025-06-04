@@ -9,9 +9,10 @@ use bitcoin::{
     io::Read,
     key::rand,
     p2p::{address::AddrV2, message::CommandString, Magic},
-    Wtxid,
+    Transaction, Txid, Wtxid,
 };
 use socks::create_socks5;
+use tokio::sync::mpsc;
 use tokio::{net::TcpStream, time::Instant};
 
 use error::PeerError;
@@ -179,6 +180,7 @@ struct MessageState {
     sent_txs: HashSet<Wtxid>,
     timed_message_state: HashMap<TimeSensitiveId, Instant>,
     ping_state: PingState,
+    tx_request_state: TxRequestState,
 }
 
 impl MessageState {
@@ -190,6 +192,7 @@ impl MessageState {
             sent_txs: Default::default(),
             timed_message_state: Default::default(),
             ping_state: PingState::default(),
+            tx_request_state: TxRequestState::default(),
         }
     }
 
@@ -337,6 +340,16 @@ impl Default for PingState {
             then: Instant::now(),
         }
     }
+}
+
+#[derive(Debug, Clone, Default)]
+enum TxRequestState {
+    #[default]
+    Idle,
+    Fetching {
+        sender: mpsc::Sender<(Txid, Transaction)>,
+        txids: HashSet<Txid>,
+    },
 }
 
 pub(crate) struct V1Header {

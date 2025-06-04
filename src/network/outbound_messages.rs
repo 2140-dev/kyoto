@@ -14,7 +14,7 @@ use bitcoin::{
         message_network::VersionMessage,
         Address, ServiceFlags,
     },
-    BlockHash, Network, Transaction, Wtxid,
+    BlockHash, Network, Transaction, Txid, Wtxid,
 };
 
 use crate::{channel_messages::GetBlockConfig, prelude::default_port_from_network};
@@ -121,6 +121,14 @@ impl MessageGenerator {
         transaction: Transaction,
     ) -> Result<Vec<u8>, PeerError> {
         let msg = NetworkMessage::Tx(transaction);
+        self.serialize(msg)
+    }
+
+    pub(crate) fn fetch_txs(
+        &mut self,
+        txids: impl IntoIterator<Item = Txid>,
+    ) -> Result<Vec<u8>, PeerError> {
+        let msg = NetworkMessage::GetData(txids.into_iter().map(Inventory::Transaction).collect());
         self.serialize(msg)
     }
 }
