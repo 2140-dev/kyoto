@@ -1,7 +1,7 @@
 extern crate alloc;
 use crate::prelude::encode_qname;
 use bitcoin::{
-    key::rand::{thread_rng, RngCore},
+    key::rand::{seq::IteratorRandom, thread_rng, RngCore},
     Network,
 };
 use std::{
@@ -85,6 +85,12 @@ impl From<DnsResolver> for SocketAddr {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct DnsConfig {
+    pub(crate) resolver: DnsResolver,
+    pub(crate) force_seeding: bool,
+}
+
 pub(crate) struct Dns<'a> {
     seeds: Vec<&'a str>,
     dns_resolver: DnsResolver,
@@ -100,6 +106,26 @@ impl Dns<'_> {
             Network::Testnet4 => TESTNET4_SEEDS.to_vec(),
             _ => unreachable!(),
         };
+        Self {
+            seeds,
+            dns_resolver,
+        }
+    }
+
+    pub fn random(network: Network, dns_resolver: DnsResolver) -> Self {
+        let seeds = match network {
+            Network::Bitcoin => MAINNET_SEEDS.to_vec(),
+            Network::Testnet => TESTNET_SEEDS.to_vec(),
+            Network::Signet => SIGNET_SEEDS.to_vec(),
+            Network::Regtest => Vec::with_capacity(0),
+            Network::Testnet4 => TESTNET4_SEEDS.to_vec(),
+            _ => unreachable!(),
+        };
+        let seeds = seeds
+            .into_iter()
+            .choose_multiple(&mut thread_rng(), 2)
+            .into_iter()
+            .collect();
         Self {
             seeds,
             dns_resolver,
