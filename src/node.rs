@@ -20,15 +20,16 @@ use tokio::{
 
 use crate::{
     chain::{
+        block_queue::BlockQueue,
         chain::Chain,
         checkpoints::{HeaderCheckpoint, HeaderCheckpoints},
         error::{CFilterSyncError, HeaderSyncError},
-        CFHeaderChanges, HeightMonitor,
+        CFHeaderChanges, FilterCheck, HeaderChainChanges, HeightMonitor,
     },
     db::traits::{HeaderStore, PeerStore},
     error::FetchHeaderError,
     network::{peer_map::PeerMap, LastBlockMonitor, PeerId},
-    NodeState, TxBroadcast, TxBroadcastPolicy,
+    IndexedBlock, NodeState, TxBroadcast, TxBroadcastPolicy,
 };
 
 use super::{
@@ -39,6 +40,9 @@ use super::{
     error::NodeError,
     messages::{ClientMessage, Event, Info, SyncUpdate, Warning},
 };
+
+#[cfg(feature = "filter-control")]
+use crate::error::FetchBlockError;
 
 pub(crate) const WTXID_VERSION: u32 = 70016;
 const LOOP_TIMEOUT: Duration = Duration::from_secs(1);
@@ -53,6 +57,7 @@ pub struct Node<H: HeaderStore, P: PeerStore + 'static> {
     peer_map: Arc<Mutex<PeerMap<P>>>,
     required_peers: PeerRequirement,
     dialog: Arc<Dialog>,
+    block_queue: Arc<Mutex<BlockQueue>>,
     client_recv: Arc<Mutex<UnboundedReceiver<ClientMessage>>>,
     peer_recv: Arc<Mutex<Receiver<PeerThreadMessage>>>,
 }
@@ -125,6 +130,7 @@ impl<H: HeaderStore, P: PeerStore> Node<H, P> {
                 peer_map,
                 required_peers: required_peers.into(),
                 dialog,
+                block_queue: Arc::new(Mutex::new(BlockQueue::new())),
                 client_recv: Arc::new(Mutex::new(crx)),
                 peer_recv: Arc::new(Mutex::new(mrx)),
             },
@@ -239,14 +245,27 @@ impl<H: HeaderStore, P: PeerStore> Node<H, P> {
                                 }
                             },
                             #[cfg(feature = "filter-control")]
-                            ClientMessage::GetBlock(hash) => {
+                            ClientMessage::GetBlock(request) => {
                                 let mut state = self.state.write().await;
                                 if matches!(*state, NodeState::TransactionsSynced) {
                                     *state = NodeState::FiltersSynced
                                 }
                                 drop(state);
-                                let mut chain = self.chain.lock().await;
-                                chain.get_block(hash).await;
+                                let chain = self.chain.lock().await;
+                                let mut queue = self.block_queue.lock().await;
+                                let height_opt = chain.header_chain.height_of_hash(request.hash);
+                                if height_opt.is_none() {
+                                    let err_reponse = request.oneshot.send(Err(FetchBlockError::UnknownHash));
+                                    if err_reponse.is_err() {
+                                        self.dialog.send_warning(Warning::ChannelDropped);
+                                    }
+                                } else {
+                                    crate::log!(
+                                        self.dialog,
+                                        format!("Adding block {} to queue", request.hash)
+                                    );
+                                    queue.add(request);
+                                }
                             },
                             ClientMessage::SetDuration(duration) => {
                                 let mut peer_map = self.peer_map.lock().await;
@@ -388,8 +407,9 @@ impl<H: HeaderStore, P: PeerStore> Node<H, P> {
                 }
             }
             NodeState::FiltersSynced => {
-                let chain = self.chain.lock().await;
-                if chain.block_queue_empty() {
+                let queue = self.block_queue.lock().await;
+                if queue.complete() {
+                    let chain = self.chain.lock().await;
                     *state = NodeState::TransactionsSynced;
                     let update = SyncUpdate::new(
                         HeaderCheckpoint::new(
@@ -509,8 +529,29 @@ impl<H: HeaderStore, P: PeerStore> Node<H, P> {
         headers: Vec<Header>,
     ) -> Option<MainThreadMessage> {
         let mut chain = self.chain.lock().await;
-        if let Err(e) = chain.sync_chain(headers).await {
-            match e {
+        match chain.sync_chain(headers).await {
+            Ok(changes) => match changes {
+                HeaderChainChanges::Extended(height) => {
+                    crate::info!(self.dialog, Info::NewChainHeight(height));
+                }
+                HeaderChainChanges::Reorg { height, hashes } => {
+                    let mut queue = self.block_queue.lock().await;
+                    queue.remove(&hashes);
+                    for hash in hashes {
+                        crate::log!(self.dialog, format!("{hash} was reorganized"));
+                    }
+                    crate::log!(self.dialog, format!("New chain height {height}"));
+                }
+                HeaderChainChanges::ForkAdded { tip } => {
+                    crate::log!(
+                        self.dialog,
+                        format!("Candidate fork {} -> {}", tip.height, tip.block_hash())
+                    );
+                    crate::info!(self.dialog, Info::NewFork { tip });
+                }
+                HeaderChainChanges::Duplicate => (),
+            },
+            Err(e) => match e {
                 HeaderSyncError::EmptyMessage => {
                     if !chain.is_synced().await {
                         return Some(MainThreadMessage::Disconnect);
@@ -525,7 +566,7 @@ impl<H: HeaderStore, P: PeerStore> Node<H, P> {
                     lock.ban(peer_id).await;
                     return Some(MainThreadMessage::Disconnect);
                 }
-            }
+            },
         }
         self.next_stateful_message(chain.deref_mut()).await
     }
@@ -565,10 +606,22 @@ impl<H: HeaderStore, P: PeerStore> Node<H, P> {
         let mut chain = self.chain.lock().await;
         match chain.sync_filter(filter) {
             Ok(potential_message) => {
-                if potential_message.is_some() {
-                    chain.send_chain_update().await;
+                let FilterCheck {
+                    needs_request,
+                    was_last_in_batch,
+                } = potential_message;
+                if let Some(hash) = needs_request {
+                    let mut queue = self.block_queue.lock().await;
+                    queue.add(hash);
                 }
-                potential_message.map(MainThreadMessage::GetFilters)
+                if was_last_in_batch {
+                    chain.send_chain_update().await;
+                    if !chain.is_filters_synced() {
+                        let next_filters = chain.next_filter_message();
+                        return Some(MainThreadMessage::GetFilters(next_filters));
+                    }
+                }
+                None
             }
             Err(e) => {
                 self.dialog.send_warning(Warning::UnexpectedSyncError {
@@ -588,14 +641,43 @@ impl<H: HeaderStore, P: PeerStore> Node<H, P> {
 
     // Scan a block for transactions.
     async fn handle_block(&self, peer_id: PeerId, block: Block) -> Option<MainThreadMessage> {
-        let mut chain = self.chain.lock().await;
-        if let Err(e) = chain.check_send_block(block) {
+        let chain = self.chain.lock().await;
+        let mut block_queue = self.block_queue.lock().await;
+        let block_hash = block.block_hash();
+        if !block_queue.need(&block_hash) {
+            return None;
+        }
+        let height = match chain.header_chain.height_of_hash(block_hash) {
+            Some(height) => height,
+            None => {
+                self.dialog.send_warning(Warning::UnexpectedSyncError {
+                    warning: "A block received does not have a known hash".into(),
+                });
+                let mut lock = self.peer_map.lock().await;
+                lock.ban(peer_id).await;
+                return Some(MainThreadMessage::Disconnect);
+            }
+        };
+        if !block.check_merkle_root() {
             self.dialog.send_warning(Warning::UnexpectedSyncError {
-                warning: format!("Unexpected block scanning error: {e}"),
+                warning: "A block received does not have a valid merkle root".into(),
             });
             let mut lock = self.peer_map.lock().await;
             lock.ban(peer_id).await;
             return Some(MainThreadMessage::Disconnect);
+        }
+        let sender = block_queue.receive(&block_hash);
+        match sender {
+            Some(sender) => {
+                let send_result = sender.send(Ok(IndexedBlock::new(height, block)));
+                if send_result.is_err() {
+                    self.dialog.send_warning(Warning::ChannelDropped)
+                };
+            }
+            None => {
+                self.dialog
+                    .send_event(Event::Block(IndexedBlock::new(height, block)));
+            }
         }
         None
     }
@@ -607,8 +689,8 @@ impl<H: HeaderStore, P: PeerStore> Node<H, P> {
             *state,
             NodeState::FilterHeadersSynced | NodeState::FiltersSynced
         ) {
-            let mut chain = self.chain.lock().await;
-            let next_block_hash = chain.next_block();
+            let mut queue = self.block_queue.lock().await;
+            let next_block_hash = queue.pop();
             return match next_block_hash {
                 Some(block_hash) => {
                     crate::log!(self.dialog, format!("Next block in queue: {}", block_hash));

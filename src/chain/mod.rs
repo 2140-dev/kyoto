@@ -67,6 +67,14 @@ impl IndexedHeader {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum HeaderChainChanges {
+    Extended(u32),
+    Reorg { height: u32, hashes: Vec<BlockHash> },
+    ForkAdded { tip: IndexedHeader },
+    Duplicate,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct FilterCommitment {
     pub header: FilterHeader,
@@ -140,6 +148,13 @@ pub(crate) enum CFHeaderChanges {
     // Unfortunately, auditing each peer by reconstruction the filter would be costly in network
     // and compute. Instead it is easier to disconnect from all peers and try again.
     Conflict,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FilterCheck {
+    pub(crate) needs_request: Option<BlockHash>,
+    // This filter was for the `stop_hash`
+    pub(crate) was_last_in_batch: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
