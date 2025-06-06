@@ -18,8 +18,8 @@ use super::{
     checkpoints::{HeaderCheckpoint, HeaderCheckpoints},
     error::{BlockScanError, CFHeaderSyncError, CFilterSyncError, HeaderSyncError},
     graph::{AcceptHeaderChanges, BlockTree, HeaderRejection},
-    CFHeaderChanges, Filter, FilterHeaderRequest, FilterRequest, FilterRequestState, HeightExt,
-    HeightMonitor, PeerId,
+    CFHeaderChanges, Filter, FilterCheck, FilterHeaderRequest, FilterRequest, FilterRequestState,
+    HeaderChainChanges, HeightExt, HeightMonitor, PeerId,
 };
 #[cfg(feature = "filter-control")]
 use crate::error::FetchBlockError;
@@ -171,17 +171,21 @@ impl<H: HeaderStore> Chain<H> {
     }
 
     // Sync the chain with headers from a peer, adjusting to reorgs if needed
-    pub(crate) async fn sync_chain(&mut self, message: Vec<Header>) -> Result<(), HeaderSyncError> {
+    pub(crate) async fn sync_chain(
+        &mut self,
+        message: Vec<Header>,
+    ) -> Result<HeaderChainChanges, HeaderSyncError> {
         let header_batch = HeadersBatch::new(message).map_err(|_| HeaderSyncError::EmptyMessage)?;
         // If our chain already has the last header in the message there is no new information
         if self.header_chain.contains(header_batch.last().block_hash()) {
-            return Ok(());
+            return Ok(HeaderChainChanges::Duplicate);
         }
         // We check first if the peer is sending us nonsense
         self.sanity_check(&header_batch)?;
         let next_checkpoint = self.checkpoints.next().copied();
         let mut db = self.db.lock().await;
-        let mut reorg_occured = false;
+        let mut reorged_hashes = None;
+        let mut fork_added = None;
         for header in header_batch.into_iter() {
             let changes = self.header_chain.accept_header(header);
             match changes {
@@ -222,6 +226,7 @@ impl<H: HeaderStore> Chain<H> {
                         });
                     }
                     None => {
+                        fork_added = Some(connected_at);
                         crate::log!(
                             self.dialog,
                             format!("Fork created or extended {}", connected_at.height)
@@ -235,12 +240,12 @@ impl<H: HeaderStore> Chain<H> {
                     crate::log!(self.dialog, "Valid reorganization found");
                     accepted.sort();
                     disconnected.sort();
-                    reorg_occured = true;
                     let removed_hashes: Vec<BlockHash> = disconnected
                         .iter()
                         .map(|index| index.header.block_hash())
                         .collect();
                     self.block_queue.remove(&removed_hashes);
+                    reorged_hashes = Some(removed_hashes);
                     db.stage(BlockHeaderChanges::Reorganized {
                         accepted: accepted.clone(),
                         reorganized: disconnected.clone(),
@@ -269,10 +274,19 @@ impl<H: HeaderStore> Chain<H> {
             });
         }
         drop(db);
-        if reorg_occured {
-            self.clear_compact_filter_queue();
+        match reorged_hashes {
+            Some(reorgs) => {
+                self.clear_compact_filter_queue();
+                Ok(HeaderChainChanges::Reorg {
+                    height: self.header_chain.height(),
+                    hashes: reorgs,
+                })
+            }
+            None => match fork_added {
+                Some(fork) => Ok(HeaderChainChanges::ForkAdded { tip: fork }),
+                None => Ok(HeaderChainChanges::Extended(self.header_chain.height())),
+            },
         }
-        Ok(())
     }
 
     // These are invariants in all batches of headers we receive
@@ -433,10 +447,9 @@ impl<H: HeaderStore> Chain<H> {
     pub(crate) fn sync_filter(
         &mut self,
         filter_message: CFilter,
-    ) -> Result<Option<GetCFilters>, CFilterSyncError> {
-        if self.is_filters_synced() {
-            return Ok(None);
-        }
+    ) -> Result<FilterCheck, CFilterSyncError> {
+        #[allow(unused_mut)]
+        let mut needs_request = None;
         let filter = Filter::new(filter_message.filter, filter_message.block_hash);
         let expected_filter_hash = self
             .header_chain
@@ -475,6 +488,7 @@ impl<H: HeaderStore> Chain<H> {
                 .contains_any(self.scripts.iter())
                 .map_err(CFilterSyncError::Filter)?
         {
+            needs_request = Some(filter_message.block_hash);
             // Add to the block queue
             self.block_queue.add(filter_message.block_hash);
         }
@@ -485,15 +499,11 @@ impl<H: HeaderStore> Chain<H> {
             .last_filter_request
             .ok_or(CFilterSyncError::UnrequestedStophash)?
             .stop_hash;
-        if filter_message.block_hash.eq(&stop_hash) {
-            if !self.is_filters_synced() {
-                Ok(Some(self.next_filter_message()))
-            } else {
-                Ok(None)
-            }
-        } else {
-            Ok(None)
-        }
+        let was_last_in_batch = filter_message.block_hash.eq(&stop_hash);
+        Ok(FilterCheck {
+            needs_request,
+            was_last_in_batch,
+        })
     }
 
     // Next filter message, if there is one

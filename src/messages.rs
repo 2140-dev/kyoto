@@ -24,6 +24,13 @@ pub enum Info {
     ConnectionsMet,
     /// The progress of the node during the block filter download process.
     Progress(Progress),
+    /// There was an update to the header chain.
+    NewChainHeight(u32),
+    /// A peer served a new fork.
+    NewFork {
+        /// The tip of the new fork.
+        tip: IndexedHeader,
+    },
     /// A transaction was sent to a peer. The `wtxid` was advertised to the
     /// peer, and the peer responded with `getdata`. The transaction was then serialized and sent
     /// over the wire. This is a strong indication the transaction will propagate, but not
@@ -43,6 +50,8 @@ impl core::fmt::Display for Info {
                 let progress_percent = p.percentage_complete();
                 write!(f, "Percent complete: {progress_percent}")
             }
+            Info::NewChainHeight(height) => write!(f, "New chain height: {height}"),
+            Info::NewFork { tip } => write!(f, "New fork {} -> {}", tip.height, tip.block_hash()),
         }
     }
 }

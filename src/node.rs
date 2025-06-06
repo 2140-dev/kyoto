@@ -23,7 +23,7 @@ use crate::{
         chain::Chain,
         checkpoints::{HeaderCheckpoint, HeaderCheckpoints},
         error::{CFilterSyncError, HeaderSyncError},
-        CFHeaderChanges, HeightMonitor,
+        CFHeaderChanges, FilterCheck, HeaderChainChanges, HeightMonitor,
     },
     db::traits::{HeaderStore, PeerStore},
     error::FetchHeaderError,
@@ -509,8 +509,27 @@ impl<H: HeaderStore, P: PeerStore> Node<H, P> {
         headers: Vec<Header>,
     ) -> Option<MainThreadMessage> {
         let mut chain = self.chain.lock().await;
-        if let Err(e) = chain.sync_chain(headers).await {
-            match e {
+        match chain.sync_chain(headers).await {
+            Ok(changes) => match changes {
+                HeaderChainChanges::Extended(height) => {
+                    crate::info!(self.dialog, Info::NewChainHeight(height));
+                }
+                HeaderChainChanges::Reorg { height, hashes } => {
+                    for hash in hashes {
+                        crate::log!(self.dialog, format!("{hash} was reorganized"));
+                    }
+                    crate::log!(self.dialog, format!("New chain height {height}"));
+                }
+                HeaderChainChanges::ForkAdded { tip } => {
+                    crate::log!(
+                        self.dialog,
+                        format!("Candidate fork {} -> {}", tip.height, tip.block_hash())
+                    );
+                    crate::info!(self.dialog, Info::NewFork { tip });
+                }
+                HeaderChainChanges::Duplicate => (),
+            },
+            Err(e) => match e {
                 HeaderSyncError::EmptyMessage => {
                     if !chain.is_synced().await {
                         return Some(MainThreadMessage::Disconnect);
@@ -525,7 +544,7 @@ impl<H: HeaderStore, P: PeerStore> Node<H, P> {
                     lock.ban(peer_id).await;
                     return Some(MainThreadMessage::Disconnect);
                 }
-            }
+            },
         }
         self.next_stateful_message(chain.deref_mut()).await
     }
@@ -565,10 +584,18 @@ impl<H: HeaderStore, P: PeerStore> Node<H, P> {
         let mut chain = self.chain.lock().await;
         match chain.sync_filter(filter) {
             Ok(potential_message) => {
-                if potential_message.is_some() {
+                let FilterCheck {
+                    needs_request: _,
+                    was_last_in_batch,
+                } = potential_message;
+                if was_last_in_batch {
                     chain.send_chain_update().await;
+                    if !chain.is_filters_synced() {
+                        let next_filters = chain.next_filter_message();
+                        return Some(MainThreadMessage::GetFilters(next_filters));
+                    }
                 }
-                potential_message.map(MainThreadMessage::GetFilters)
+                None
             }
             Err(e) => {
                 self.dialog.send_warning(Warning::UnexpectedSyncError {
