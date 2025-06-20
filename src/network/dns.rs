@@ -38,10 +38,10 @@ const TESTNET4_SEEDS: &[&str; 2] = &[
     "seed.testnet4.wiz.biz",
 ];
 
-const SERVICE_BITS_PREFIX: &[&str; 2] = &[
-    "x49",  // Compact Filters, Node Network
-    "x849", // Compact Filters, Node Network, P2P V2
-];
+pub(crate) const CBF_SERVICE_BIT_PREFIX: &str = "x49"; // Compact Filters, Node Network
+pub(crate) const CBF_V2T_SERVICE_BIT_PREFIX: &str = "x849"; // Compact Filters, Node Network, P2P V2
+
+const SERVICE_BITS_PREFIX: &[&str; 2] = &[CBF_SERVICE_BIT_PREFIX, CBF_V2T_SERVICE_BIT_PREFIX];
 
 pub(crate) const DNS_RESOLVER_PORT: u16 = 53;
 const LOCAL_HOST: &str = "0.0.0.0:0";
@@ -97,7 +97,7 @@ pub(crate) async fn bootstrap_dns(network: Network, dns_resolver: DnsResolver) -
     let mut ip_addrs: Vec<IpAddr> = vec![];
     for host in seeds {
         for filter in SERVICE_BITS_PREFIX {
-            if let Ok(addrs) = DNSQuery::new(host, filter)
+            if let Ok(addrs) = DnsQuery::new(host, filter)
                 .lookup(dns_resolver.into())
                 .await
             {
@@ -108,14 +108,14 @@ pub(crate) async fn bootstrap_dns(network: Network, dns_resolver: DnsResolver) -
     ip_addrs
 }
 
-struct DNSQuery {
+pub(crate) struct DnsQuery {
     message_id: [u8; 2],
     message: Vec<u8>,
     question: Vec<u8>,
 }
 
-impl DNSQuery {
-    fn new(seed: &str, service_bit_prefix: &str) -> Self {
+impl DnsQuery {
+    pub(crate) fn new(seed: &str, service_bit_prefix: &str) -> Self {
         // Build a header
         let mut rng = thread_rng();
         let mut message_id = [0, 0];
@@ -135,7 +135,10 @@ impl DNSQuery {
         }
     }
 
-    async fn lookup(&self, dns_resolver: SocketAddr) -> Result<Vec<IpAddr>, DNSQueryError> {
+    pub(crate) async fn lookup(
+        &self,
+        dns_resolver: SocketAddr,
+    ) -> Result<Vec<IpAddr>, DNSQueryError> {
         let sock = UdpSocket::bind(LOCAL_HOST).await?;
         sock.connect(dns_resolver).await?;
         sock.send(&self.message).await?;
@@ -200,22 +203,5 @@ impl DNSQuery {
             }
         }
         Ok(ips)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use std::net::SocketAddr;
-
-    use super::*;
-
-    #[tokio::test]
-    #[ignore = "dns works"]
-    async fn dns_responds() {
-        let socket_addr = "1.1.1.1:53".parse::<SocketAddr>().unwrap();
-        let addrs = bootstrap_dns(Network::Bitcoin, DnsResolver { socket_addr }).await;
-        assert!(addrs.len() > 1);
-        let first = addrs.first().unwrap();
-        println!("Example IP: {first:?}");
     }
 }

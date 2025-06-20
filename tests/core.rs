@@ -1,6 +1,6 @@
 use std::{
     collections::HashSet,
-    net::{IpAddr, SocketAddrV4},
+    net::{IpAddr, Ipv4Addr, SocketAddrV4},
     path::PathBuf,
     time::Duration,
 };
@@ -19,8 +19,9 @@ use bitcoin::{
 use corepc_node::serde_json;
 use corepc_node::{anyhow, exe_path};
 use kyoto::{
-    chain::checkpoints::HeaderCheckpoint, client::Client, node::Node, Address, BlockHash, Event,
-    Info, ServiceFlags, SqliteHeaderDb, SqlitePeerDb, Transaction, TrustedPeer, Warning,
+    chain::checkpoints::HeaderCheckpoint, client::Client, lookup_host, node::Node, Address,
+    BlockHash, Event, Info, ServiceFlags, SqliteHeaderDb, SqlitePeerDb, Transaction, TrustedPeer,
+    Warning,
 };
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -722,4 +723,11 @@ async fn blocks_are_fetched() {
     // Assert the relevant TXIDs have been fetched by the end
     assert!(relevant_txids.is_empty());
     drop(handle);
+}
+
+#[tokio::test]
+async fn dns_fn_works() {
+    let cloudflare = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1));
+    let addrs = lookup_host("seed.bitcoin.sipa.be", cloudflare).await;
+    assert!(!addrs.is_empty());
 }

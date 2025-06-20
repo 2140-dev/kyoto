@@ -101,6 +101,10 @@ pub mod node;
 #[cfg(feature = "filter-control")]
 use chain::Filter;
 
+use network::dns::DnsQuery;
+use network::dns::CBF_V2T_SERVICE_BIT_PREFIX;
+use network::dns::DNS_RESOLVER_PORT;
+
 use std::net::{IpAddr, SocketAddr};
 
 // Re-exports
@@ -418,6 +422,33 @@ impl core::fmt::Display for NodeState {
             NodeState::TransactionsSynced => write!(f, "Fully synced to the highest block."),
         }
     }
+}
+
+/// Query a DNS seed using the configured resolver.
+///
+/// This has no guarantee of returning any `IpAddr`. The query is filtered for compact block filter peers
+/// that support V2 transport. This function is intended to mirror [`lookup_host`](tokio::net::lookup_host),
+/// but allows for a custom DNS resolver as well as automatic query filtering for CBF nodes.
+///
+/// # Example usage
+///
+/// ```no_run
+/// use std::net::{IpAddr, Ipv4Addr};
+///
+/// use kyoto::lookup_host;
+///
+/// #[tokio::main]
+/// async fn main() {
+///     // Use cloudflare's DNS resolver
+///     let resolver = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1));
+///     let addrs = lookup_host("seed.bitcoin.sipa.be", resolver).await;
+/// }
+/// ```
+pub async fn lookup_host<S: AsRef<str>>(hostname: S, resolver: impl Into<IpAddr>) -> Vec<IpAddr> {
+    let dns_query = DnsQuery::new(hostname.as_ref(), CBF_V2T_SERVICE_BIT_PREFIX);
+    let ip_addr = resolver.into();
+    let socket_addr = SocketAddr::new(ip_addr, DNS_RESOLVER_PORT);
+    dns_query.lookup(socket_addr).await.unwrap_or(Vec::new())
 }
 
 macro_rules! log {
