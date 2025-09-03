@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, ops::Range, time::Duration};
+use std::{collections::BTreeMap, time::Duration};
 
 use bitcoin::{
     block::Header, p2p::message_network::RejectReason, BlockHash, FeeRate, ScriptBuf, Wtxid,
@@ -12,7 +12,7 @@ use crate::{
     IndexedBlock, NodeState, TrustedPeer, TxBroadcast,
 };
 
-use super::error::{FetchBlockError, FetchHeaderError};
+use super::error::FetchBlockError;
 
 /// Informational messages emitted by a node
 #[derive(Debug, Clone)]
@@ -166,43 +166,10 @@ pub(crate) enum ClientMessage {
     SetDuration(Duration),
     /// Add another known peer to connect to.
     AddPeer(TrustedPeer),
-    /// Request a header from a specified height.
-    GetHeader(HeaderRequest),
-    /// Request a range of headers.
-    GetHeaderBatch(BatchHeaderRequest),
     /// Request the broadcast minimum fee rate.
     GetBroadcastMinFeeRate(FeeRateSender),
     /// Send an empty message to see if the node is running.
     NoOp,
-}
-
-type HeaderSender = tokio::sync::oneshot::Sender<Result<Header, FetchHeaderError>>;
-
-#[derive(Debug)]
-pub(crate) struct HeaderRequest {
-    pub(crate) oneshot: HeaderSender,
-    pub(crate) height: u32,
-}
-
-impl HeaderRequest {
-    pub(crate) fn new(oneshot: HeaderSender, height: u32) -> Self {
-        Self { oneshot, height }
-    }
-}
-
-type BatchHeaderSender =
-    tokio::sync::oneshot::Sender<Result<BTreeMap<u32, Header>, FetchHeaderError>>;
-
-#[derive(Debug)]
-pub(crate) struct BatchHeaderRequest {
-    pub(crate) oneshot: BatchHeaderSender,
-    pub(crate) range: Range<u32>,
-}
-
-impl BatchHeaderRequest {
-    pub(crate) fn new(oneshot: BatchHeaderSender, range: Range<u32>) -> Self {
-        Self { oneshot, range }
-    }
 }
 
 pub(crate) type FeeRateSender = tokio::sync::oneshot::Sender<FeeRate>;

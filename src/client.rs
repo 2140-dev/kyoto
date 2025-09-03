@@ -1,8 +1,8 @@
 #[cfg(not(feature = "filter-control"))]
 use bitcoin::ScriptBuf;
-use bitcoin::{block::Header, BlockHash, FeeRate};
 use bitcoin::{Amount, Transaction};
-use std::{collections::BTreeMap, ops::Range, time::Duration};
+use bitcoin::{BlockHash, FeeRate};
+use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::oneshot;
@@ -12,8 +12,8 @@ use crate::{Event, Info, TrustedPeer, TxBroadcast, Warning};
 
 use super::{error::FetchBlockError, messages::BlockRequest, IndexedBlock};
 use super::{
-    error::{ClientError, FetchFeeRateError, FetchHeaderError},
-    messages::{BatchHeaderRequest, ClientMessage, HeaderRequest},
+    error::{ClientError, FetchFeeRateError},
+    messages::ClientMessage,
 };
 
 /// A [`Client`] allows for communication with a running node.
@@ -131,43 +131,6 @@ impl Requester {
         self.ntx
             .send(ClientMessage::AddScript(script.into()))
             .map_err(|_| ClientError::SendError)
-    }
-
-    /// Get a header at the specified height, if it exists.
-    ///
-    /// # Note
-    ///
-    /// The height of the chain is the canonical index of the header in the chain.
-    /// For example, the genesis block is at a height of zero.
-    ///
-    /// # Errors
-    ///
-    /// If the node has stopped running.
-    pub async fn get_header(&self, height: u32) -> Result<Header, FetchHeaderError> {
-        let (tx, rx) = tokio::sync::oneshot::channel::<Result<Header, FetchHeaderError>>();
-        let message = HeaderRequest::new(tx, height);
-        self.ntx
-            .send(ClientMessage::GetHeader(message))
-            .map_err(|_| FetchHeaderError::SendError)?;
-        rx.await.map_err(|_| FetchHeaderError::RecvError)?
-    }
-
-    /// Get a range of headers by the specified range.
-    ///
-    /// # Errors
-    ///
-    /// If the node has stopped running.
-    pub async fn get_header_range(
-        &self,
-        range: Range<u32>,
-    ) -> Result<BTreeMap<u32, Header>, FetchHeaderError> {
-        let (tx, rx) =
-            tokio::sync::oneshot::channel::<Result<BTreeMap<u32, Header>, FetchHeaderError>>();
-        let message = BatchHeaderRequest::new(tx, range);
-        self.ntx
-            .send(ClientMessage::GetHeaderBatch(message))
-            .map_err(|_| FetchHeaderError::SendError)?;
-        rx.await.map_err(|_| FetchHeaderError::RecvError)?
     }
 
     /// Request a block be fetched. Note that this method will request a block

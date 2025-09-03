@@ -20,8 +20,7 @@ use corepc_node::serde_json;
 use corepc_node::{anyhow, exe_path};
 use kyoto::{
     chain::checkpoints::HeaderCheckpoint, client::Client, lookup_host, node::Node, Address,
-    BlockHash, Event, Info, ServiceFlags, SqliteHeaderDb, SqlitePeerDb, Transaction, TrustedPeer,
-    Warning,
+    BlockHash, Event, Info, ServiceFlags, SqlitePeerDb, Transaction, TrustedPeer, Warning,
 };
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -54,7 +53,7 @@ fn new_node(
     socket_addr: SocketAddrV4,
     tempdir_path: PathBuf,
     checkpoint: Option<HeaderCheckpoint>,
-) -> (Node<SqliteHeaderDb, SqlitePeerDb>, Client) {
+) -> (Node<SqlitePeerDb>, Client) {
     let host = (IpAddr::V4(*socket_addr.ip()), Some(socket_addr.port()));
     let mut trusted: TrustedPeer = host.into();
     trusted.set_services(ServiceFlags::P2P_V2);
@@ -206,8 +205,6 @@ async fn live_reorg_additional_sync() {
     // Reorganize the blocks
     let old_best = best;
     let old_height = num_blocks(rpc);
-    let fetched_header = requester.get_header(10).await.unwrap();
-    assert_eq!(old_best, fetched_header.block_hash());
     invalidate_block(rpc, &best).await;
     mine_blocks(rpc, &miner, 2, 1).await;
     let best = best_hash(rpc);
@@ -259,10 +256,7 @@ async fn various_client_methods() {
     } = client;
     tokio::task::spawn(async move { print_logs(log_rx, warn_rx).await });
     sync_assert(&best, &mut channel).await;
-    let batch = requester.get_header_range(10_000..10_002).await.unwrap();
-    assert!(batch.is_empty());
     let _ = requester.broadcast_min_feerate().await.unwrap();
-    let _ = requester.get_header(3).await.unwrap();
     let script = rpc.new_address().unwrap();
     requester.add_script(script).unwrap();
     assert!(requester.is_running());
@@ -293,8 +287,6 @@ async fn stop_reorg_resync() {
     } = client;
     tokio::task::spawn(async move { print_logs(log_rx, warn_rx).await });
     sync_assert(&best, &mut channel).await;
-    let batch = requester.get_header_range(0..10).await.unwrap();
-    assert!(!batch.is_empty());
     requester.shutdown().unwrap();
     // Reorganize the blocks
     let old_best = best;

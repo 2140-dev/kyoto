@@ -9,18 +9,15 @@ use super::{client::Client, config::NodeConfig, node::Node};
 #[cfg(feature = "rusqlite")]
 use crate::db::error::SqlInitializationError;
 #[cfg(feature = "rusqlite")]
-use crate::db::sqlite::{headers::SqliteHeaderDb, peers::SqlitePeerDb};
+use crate::db::sqlite::peers::SqlitePeerDb;
 use crate::network::dns::{DnsResolver, DNS_RESOLVER_PORT};
 use crate::network::ConnectionType;
-use crate::{
-    chain::checkpoints::HeaderCheckpoint,
-    db::traits::{HeaderStore, PeerStore},
-};
+use crate::{chain::checkpoints::HeaderCheckpoint, db::traits::PeerStore};
 use crate::{LogLevel, PeerStoreSizeConfig, TrustedPeer};
 
 #[cfg(feature = "rusqlite")]
 /// The default node returned from the [`NodeBuilder`].
-pub type NodeDefault = Node<SqliteHeaderDb, SqlitePeerDb>;
+pub type NodeDefault = Node<SqlitePeerDb>;
 
 const MIN_PEERS: u8 = 1;
 const MAX_PEERS: u8 = 15;
@@ -219,26 +216,18 @@ impl NodeBuilder {
     #[cfg(feature = "rusqlite")]
     pub fn build(&mut self) -> Result<(NodeDefault, Client), SqlInitializationError> {
         let peer_store = SqlitePeerDb::new(self.network, self.config.data_path.clone())?;
-        let header_store = SqliteHeaderDb::new(self.network, self.config.data_path.clone())?;
         Ok(Node::new(
             self.network,
             core::mem::take(&mut self.config),
             peer_store,
-            header_store,
         ))
     }
 
     /// Consume the node builder by using custom database implementations, receiving a [`Node`] and [`Client`].
-    pub fn build_with_databases<H: HeaderStore + 'static, P: PeerStore + 'static>(
+    pub fn build_with_databases<P: PeerStore + 'static>(
         &mut self,
         peer_store: P,
-        header_store: H,
-    ) -> (Node<H, P>, Client) {
-        Node::new(
-            self.network,
-            core::mem::take(&mut self.config),
-            peer_store,
-            header_store,
-        )
+    ) -> (Node<P>, Client) {
+        Node::new(self.network, core::mem::take(&mut self.config), peer_store)
     }
 }
