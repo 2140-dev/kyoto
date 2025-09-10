@@ -47,7 +47,7 @@ Kyoto integrates well with the Bitcoin Dev Kit (BDK) ecosystem.
 
 ## Minimum Supported Rust Version (MSRV) Policy
 
-The `kyoto` core library with default features supports an MSRV of Rust 1.63.
+The `kyoto` core library with default features supports an MSRV of Rust 1.74.
 
 ## Contributing
 

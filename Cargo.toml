@@ -9,7 +9,7 @@ repository = "https://github.com/rustaceanrob/kyoto"
 readme = "README.md"
 keywords = ["bitcoin", "cryptography", "network", "peer-to-peer"]
 categories = ["cryptography::cryptocurrencies"]
-rust-version = "1.63.0"
+rust-version = "1.74.0"
 
 [dependencies]
 bitcoin = { version = "0.32.7", default-features = false, features = [
