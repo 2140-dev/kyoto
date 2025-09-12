@@ -13,6 +13,10 @@
   </p>
 </div>
 
+## Notice
+
+The development of this crate has been moved to [bip157](https://crates.io/crates/bip157).
+
 ## About
 
 Kyoto is aiming to be a simple, memory-conservative, and private Bitcoin client for developers to build wallet applications. To read more about the scope, usage recommendations, and implementation details, see [DETAILS.md](./doc/DETAILS.md).
