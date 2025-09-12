@@ -62,9 +62,7 @@ async fn main() {
                             tracing::info!("Last block average fee rate: {:#}", avg_fee_rate);
                             break;
                         },
-                        Event::BlocksDisconnected { accepted: _, disconnected: _} => {
-                            tracing::warn!("Some blocks were reorganized")
-                        },
+                        Event::IndexedFilter(_) => (),
                         _ => (),
                     }
                 }

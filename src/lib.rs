@@ -88,7 +88,7 @@ pub use chain::checkpoints::HeaderCheckpoint;
 pub use db::sqlite::{headers::SqliteHeaderDb, peers::SqlitePeerDb};
 
 #[doc(inline)]
-pub use db::traits::{HeaderStore, PeerStore};
+pub use db::traits::PeerStore;
 
 #[doc(inline)]
 pub use tokio::sync::mpsc::Receiver;
@@ -154,9 +154,7 @@ impl IndexedFilter {
 
     /// Does the filter contain a positive match for any of the provided scripts
     pub fn contains_any<'a>(&'a self, scripts: impl Iterator<Item = &'a ScriptBuf>) -> bool {
-        self.filter
-            .contains_any(scripts)
-            .expect("vec reader is infallible")
+        self.filter.contains_any(scripts)
     }
 
     /// Consume the index and get underlying block filter.

@@ -5,9 +5,7 @@ use std::{
 };
 
 use bip157::{
-    chain::checkpoints::HeaderCheckpoint, client::Client, lookup_host, node::Node, Address,
-    BlockHash, Event, Info, ServiceFlags, SqliteHeaderDb, SqlitePeerDb, Transaction, TrustedPeer,
-    Warning,
+    chain::checkpoints::HeaderCheckpoint, client::Client, db::BlockHeaderChanges, lookup_host, node::Node, Address, BlockHash, Event, Info, ServiceFlags, SqlitePeerDb, Transaction, TrustedPeer, Warning
 };
 use bitcoin::{
     absolute,
@@ -52,7 +50,7 @@ fn new_node(
     socket_addr: SocketAddrV4,
     tempdir_path: PathBuf,
     checkpoint: Option<HeaderCheckpoint>,
-) -> (Node<SqliteHeaderDb, SqlitePeerDb>, Client) {
+) -> (Node<SqlitePeerDb>, Client) {
     let host = (IpAddr::V4(*socket_addr.ip()), Some(socket_addr.port()));
     let mut trusted: TrustedPeer = host.into();
     trusted.set_services(ServiceFlags::P2P_V2);
@@ -151,10 +149,10 @@ async fn live_reorg() {
     // Make sure the reorg was caught
     while let Some(message) = channel.recv().await {
         match message {
-            bip157::messages::Event::BlocksDisconnected {
+            Event::Chain(BlockHeaderChanges::Reorganized {
                 accepted: _,
-                disconnected: blocks,
-            } => {
+                reorganized: blocks,
+            }) => {
                 assert_eq!(blocks.len(), 1);
                 assert_eq!(blocks.first().unwrap().header.block_hash(), old_best);
                 assert_eq!(old_height as u32, blocks.first().unwrap().height);
@@ -193,18 +191,16 @@ async fn live_reorg_additional_sync() {
     // Reorganize the blocks
     let old_best = best;
     let old_height = num_blocks(rpc);
-    let fetched_header = requester.get_header(10).await.unwrap();
-    assert_eq!(old_best, fetched_header.block_hash());
     invalidate_block(rpc, &best).await;
     mine_blocks(rpc, &miner, 2, 1).await;
     let best = best_hash(rpc);
     // Make sure the reorg was caught
     while let Some(message) = channel.recv().await {
         match message {
-            bip157::messages::Event::BlocksDisconnected {
+            Event::Chain(BlockHeaderChanges::Reorganized {
                 accepted: _,
-                disconnected: blocks,
-            } => {
+                reorganized: blocks,
+            }) => {
                 assert_eq!(blocks.len(), 1);
                 assert_eq!(blocks.first().unwrap().header.block_hash(), old_best);
                 assert_eq!(old_height as u32, blocks.first().unwrap().height);
@@ -242,10 +238,7 @@ async fn various_client_methods() {
     } = client;
     tokio::task::spawn(async move { print_logs(info_rx, warn_rx).await });
     sync_assert(&best, &mut channel).await;
-    let batch = requester.get_header_range(10_000..10_002).await.unwrap();
-    assert!(batch.is_empty());
     let _ = requester.broadcast_min_feerate().await.unwrap();
-    let _ = requester.get_header(3).await.unwrap();
     assert!(requester.is_running());
     requester.shutdown().unwrap();
     rpc.stop().unwrap();
@@ -270,8 +263,6 @@ async fn stop_reorg_resync() {
     } = client;
     tokio::task::spawn(async move { print_logs(info_rx, warn_rx).await });
     sync_assert(&best, &mut channel).await;
-    let batch = requester.get_header_range(0..10).await.unwrap();
-    assert!(!batch.is_empty());
     requester.shutdown().unwrap();
     // Reorganize the blocks
     let old_best = best;
@@ -292,10 +283,10 @@ async fn stop_reorg_resync() {
     // Make sure the reorganization is caught after a cold start
     while let Some(message) = channel.recv().await {
         match message {
-            bip157::messages::Event::BlocksDisconnected {
+            Event::Chain(BlockHeaderChanges::Reorganized {
                 accepted: _,
-                disconnected: blocks,
-            } => {
+                reorganized: blocks,
+            }) => {
                 assert_eq!(blocks.len(), 1);
                 assert_eq!(blocks.first().unwrap().header.block_hash(), old_best);
                 assert_eq!(old_height as u32, blocks.first().unwrap().height);
@@ -370,10 +361,10 @@ async fn stop_reorg_two_resync() {
     let handle = tokio::task::spawn(async move { print_logs(info_rx, warn_rx).await });
     while let Some(message) = channel.recv().await {
         match message {
-            bip157::messages::Event::BlocksDisconnected {
+            Event::Chain(BlockHeaderChanges::Reorganized {
                 accepted: _,
-                disconnected: blocks,
-            } => {
+                reorganized: blocks,
+            }) => {
                 assert_eq!(blocks.len(), 2);
                 assert_eq!(blocks.last().unwrap().header.block_hash(), old_best);
                 assert_eq!(old_height as u32, blocks.last().unwrap().height);
@@ -450,10 +441,10 @@ async fn stop_reorg_start_on_orphan() {
     // Ensure SQL is able to catch the fork by loading in headers from the database
     while let Some(message) = channel.recv().await {
         match message {
-            bip157::messages::Event::BlocksDisconnected {
+            Event::Chain(BlockHeaderChanges::Reorganized {
                 accepted: _,
-                disconnected: blocks,
-            } => {
+                reorganized: blocks,
+            }) => {
                 assert_eq!(blocks.len(), 1);
                 assert_eq!(blocks.first().unwrap().header.block_hash(), old_best);
                 assert_eq!(old_height as u32, blocks.first().unwrap().height);

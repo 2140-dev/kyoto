@@ -10,9 +10,7 @@ use rusqlite::{params, params_from_iter, Connection, Result};
 use tokio::sync::Mutex;
 
 use crate::db::error::{SqlHeaderStoreError, SqlInitializationError};
-use crate::db::traits::HeaderStore;
 use crate::db::BlockHeaderChanges;
-use crate::prelude::FutureResult;
 
 use super::{DATA_DIR, DEFAULT_CWD};
 
@@ -84,7 +82,8 @@ impl SqliteHeaderDb {
         Ok(())
     }
 
-    async fn load<'a>(
+    /// Load a range of headers by their range of heights.
+    pub async fn load<'a>(
         &mut self,
         range: impl RangeBounds<u32> + Send + Sync + 'a,
     ) -> Result<BTreeMap<u32, Header>, SqlHeaderStoreError> {
@@ -137,7 +136,8 @@ impl SqliteHeaderDb {
         Ok(headers)
     }
 
-    fn stage(&mut self, changes: BlockHeaderChanges) {
+    /// State changes to the block header tree.
+    pub fn stage(&mut self, changes: BlockHeaderChanges) {
         match changes {
             BlockHeaderChanges::Connected(indexed_header) => {
                 self.accepted
@@ -161,7 +161,8 @@ impl SqliteHeaderDb {
         }
     }
 
-    async fn write(&mut self) -> Result<(), SqlHeaderStoreError> {
+    /// Flush the changes.
+    pub async fn write(&mut self) -> Result<(), SqlHeaderStoreError> {
         let mut write_lock = self.conn.lock().await;
         let tx = write_lock.transaction()?;
         for removed in core::mem::take(&mut self.disconnected) {
@@ -180,7 +181,8 @@ impl SqliteHeaderDb {
         Ok(())
     }
 
-    async fn height_of(
+    /// Fetch the height of a block hash.
+    pub async fn height_of(
         &mut self,
         block_hash: &BlockHash,
     ) -> Result<Option<u32>, SqlHeaderStoreError> {
@@ -191,7 +193,8 @@ impl SqliteHeaderDb {
         Ok(row)
     }
 
-    async fn hash_at(&mut self, height: u32) -> Result<Option<BlockHash>, SqlHeaderStoreError> {
+    /// Fetch the hash at a particular height.
+    pub async fn hash_at(&mut self, height: u32) -> Result<Option<BlockHash>, SqlHeaderStoreError> {
         let write_lock = self.conn.lock().await;
         let stmt = "SELECT block_hash FROM headers WHERE height = ?1";
         let row: Option<[u8; 32]> =
@@ -202,7 +205,8 @@ impl SqliteHeaderDb {
         }
     }
 
-    async fn header_at(&mut self, height: u32) -> Result<Option<Header>, SqlHeaderStoreError> {
+    /// Get the header at a particular height.
+    pub async fn header_at(&mut self, height: u32) -> Result<Option<Header>, SqlHeaderStoreError> {
         let write_lock = self.conn.lock().await;
         let stmt = "SELECT * FROM headers WHERE height = ?1";
         let query = write_lock.query_row(stmt, params![height], |row| {
@@ -217,40 +221,6 @@ impl SqliteHeaderDb {
                 _ => Err(SqlHeaderStoreError::SQL(e)),
             },
         }
-    }
-}
-
-impl HeaderStore for SqliteHeaderDb {
-    type Error = SqlHeaderStoreError;
-
-    fn load<'a>(
-        &'a mut self,
-        range: impl RangeBounds<u32> + Send + Sync + 'a,
-    ) -> FutureResult<'a, BTreeMap<u32, Header>, Self::Error> {
-        Box::pin(self.load(range))
-    }
-
-    fn stage(&mut self, changes: BlockHeaderChanges) {
-        self.stage(changes)
-    }
-
-    fn write(&mut self) -> FutureResult<'_, (), Self::Error> {
-        Box::pin(self.write())
-    }
-
-    fn height_of<'a>(
-        &'a mut self,
-        hash: &'a BlockHash,
-    ) -> FutureResult<'a, Option<u32>, Self::Error> {
-        Box::pin(self.height_of(hash))
-    }
-
-    fn hash_at(&mut self, height: u32) -> FutureResult<'_, Option<BlockHash>, Self::Error> {
-        Box::pin(self.hash_at(height))
-    }
-
-    fn header_at(&mut self, height: u32) -> FutureResult<'_, Option<Header>, Self::Error> {
-        Box::pin(self.header_at(height))
     }
 }
 

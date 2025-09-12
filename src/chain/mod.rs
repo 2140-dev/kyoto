@@ -26,7 +26,6 @@ use bitcoin::{
 use crate::network::PeerId;
 
 use cfheader_batch::CFHeaderBatch;
-use error::FilterError;
 
 type Height = u32;
 
@@ -186,13 +185,10 @@ impl Filter {
         &self.block_hash
     }
 
-    pub fn contains_any<'a>(
-        &'a self,
-        scripts: impl Iterator<Item = &'a ScriptBuf>,
-    ) -> Result<bool, FilterError> {
+    pub fn contains_any<'a>(&'a self, scripts: impl Iterator<Item = &'a ScriptBuf>) -> bool {
         self.block_filter
             .match_any(&self.block_hash, scripts.map(|script| script.to_bytes()))
-            .map_err(|_| FilterError::IORead)
+            .expect("vec readers cannot fail")
     }
 
     pub fn into_filter(self) -> BlockFilter {
@@ -242,8 +238,6 @@ trait HeightExt: Clone + Copy + std::hash::Hash + PartialEq + Eq + PartialOrd + 
     fn from_u64_checked(height: u64) -> Option<Self>;
 
     fn is_adjustment_multiple(&self, params: impl AsRef<Params>) -> bool;
-
-    fn last_epoch_start(&self, params: impl AsRef<Params>) -> Self;
 }
 
 impl HeightExt for u32 {
@@ -257,12 +251,6 @@ impl HeightExt for u32 {
 
     fn from_u64_checked(height: u64) -> Option<Self> {
         height.try_into().ok()
-    }
-
-    fn last_epoch_start(&self, params: impl AsRef<Params>) -> Self {
-        let diff_adjustment_interval = params.as_ref().difficulty_adjustment_interval() as u32;
-        let floor = self / diff_adjustment_interval;
-        floor * diff_adjustment_interval
     }
 }
 
@@ -280,7 +268,6 @@ pub(crate) fn block_subsidy(height: u32) -> Amount {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitcoin::Network;
 
     #[test]
     fn test_height_monitor() {
@@ -307,18 +294,6 @@ mod tests {
         // peer one is now at 12
         height_monitor.increment(peer_one);
         assert!(height_monitor.max().unwrap().eq(&12));
-    }
-
-    #[test]
-    fn test_height_ext() {
-        assert!(2016.is_adjustment_multiple(Network::Bitcoin));
-        assert!(4032.is_adjustment_multiple(Network::Bitcoin));
-        let height = 2300;
-        assert_eq!(height.last_epoch_start(Network::Bitcoin), 2016);
-        let height = 4033;
-        assert_eq!(height.last_epoch_start(Network::Bitcoin), 4032);
-        let height = 4032;
-        assert_eq!(height.last_epoch_start(Network::Bitcoin), 4032);
     }
 
     #[test]

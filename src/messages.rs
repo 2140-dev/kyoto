@@ -1,14 +1,15 @@
-use std::{collections::BTreeMap, ops::Range, time::Duration};
+use std::{collections::BTreeMap, time::Duration};
 
 use bitcoin::{block::Header, p2p::message_network::RejectReason, BlockHash, FeeRate, Wtxid};
 
+use crate::db::BlockHeaderChanges;
 use crate::IndexedFilter;
 use crate::{
     chain::{checkpoints::HeaderCheckpoint, IndexedHeader},
     IndexedBlock, TrustedPeer, TxBroadcast,
 };
 
-use super::error::{FetchBlockError, FetchHeaderError};
+use super::error::FetchBlockError;
 
 /// Informational messages emitted by a node
 #[derive(Debug, Clone)]
@@ -63,12 +64,7 @@ pub enum Event {
     /// The node is fully synced, having scanned the requested range.
     FiltersSynced(SyncUpdate),
     /// Blocks were reorganized out of the chain.
-    BlocksDisconnected {
-        /// Blocks that were accepted to the chain of most work in ascending order by height.
-        accepted: Vec<IndexedHeader>,
-        /// Blocks that were disconnected from the chain of most work in ascending order by height.
-        disconnected: Vec<IndexedHeader>,
-    },
+    Chain(BlockHeaderChanges),
     /// A compact block filter with associated height and block hash.
     IndexedFilter(IndexedFilter),
 }
@@ -158,10 +154,6 @@ pub(crate) enum ClientMessage {
     SetDuration(Duration),
     /// Add another known peer to connect to.
     AddPeer(TrustedPeer),
-    /// Request a header from a specified height.
-    GetHeader(ClientRequest<u32, Result<Header, FetchHeaderError>>),
-    /// Request a range of headers.
-    GetHeaderBatch(ClientRequest<Range<u32>, Result<BTreeMap<u32, Header>, FetchHeaderError>>),
     /// Request the broadcast minimum fee rate.
     GetBroadcastMinFeeRate(ClientRequest<(), FeeRate>),
     /// Send an empty message to see if the node is running.
