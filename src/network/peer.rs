@@ -5,7 +5,7 @@ use addrman::Record;
 use bip324::{AsyncProtocol, PacketReader, PacketWriter, Role};
 use bitcoin::{p2p::ServiceFlags, Network};
 use tokio::{
-    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
+    io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
     net::TcpStream,
     select,
     sync::{
@@ -79,7 +79,8 @@ impl Peer {
     pub async fn run(&mut self, connection: TcpStream) -> Result<(), PeerError> {
         let start_time = Instant::now();
         let (tx, mut rx) = mpsc::channel(32);
-        let (mut reader, mut writer) = connection.into_split();
+        let (reader, mut writer) = connection.into_split();
+        let mut reader = BufReader::new(reader);
         // If a peer signals for V2 we will use it, otherwise just use plaintext.
         let (mut outbound_messages, mut peer_reader) =
             if self.source.service_flags().has(ServiceFlags::P2P_V2) {

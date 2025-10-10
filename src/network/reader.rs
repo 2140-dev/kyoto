@@ -3,7 +3,7 @@ use std::net::IpAddr;
 use bitcoin::p2p::address::AddrV2;
 use bitcoin::p2p::{message::NetworkMessage, message_blockdata::Inventory, ServiceFlags};
 use bitcoin::{FeeRate, Wtxid};
-use tokio::io::AsyncReadExt;
+use tokio::io::AsyncBufReadExt;
 use tokio::sync::mpsc::Sender;
 
 use crate::channel_messages::{CombinedAddr, ReaderMessage};
@@ -17,12 +17,12 @@ const MAX_ADDR: usize = 1_000;
 const MAX_INV: usize = 50_000;
 const MAX_HEADERS: usize = 2_000;
 
-pub(crate) struct Reader<R: AsyncReadExt + Send + Sync + Unpin> {
+pub(crate) struct Reader<R: AsyncBufReadExt + Send + Sync + Unpin> {
     parser: MessageParser<R>,
     tx: Sender<ReaderMessage>,
 }
 
-impl<R: AsyncReadExt + Send + Sync + Unpin> Reader<R> {
+impl<R: AsyncBufReadExt + Send + Sync + Unpin> Reader<R> {
     pub fn new(parser: MessageParser<R>, tx: Sender<ReaderMessage>) -> Self {
         Self { parser, tx }
     }

@@ -3,19 +3,19 @@ use bip324::{PacketReader, PacketType};
 use bitcoin::consensus::{deserialize, deserialize_partial};
 use bitcoin::p2p::message::RawNetworkMessage;
 use bitcoin::Network;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncBufReadExt, AsyncReadExt};
 
 use super::error::ReaderError;
 use super::V1Header;
 
 const MAX_MESSAGE_BYTES: u32 = 1024 * 1024 * 32;
 
-pub(crate) enum MessageParser<R: AsyncReadExt + Send + Sync + Unpin> {
+pub(crate) enum MessageParser<R: AsyncBufReadExt + Send + Sync + Unpin> {
     V2(R, PacketReader),
     V1(R, Network),
 }
 
-impl<R: AsyncReadExt + Send + Sync + Unpin> MessageParser<R> {
+impl<R: AsyncBufReadExt + Send + Sync + Unpin> MessageParser<R> {
     pub async fn read_message(&mut self) -> Result<Option<NetworkMessage>, ReaderError> {
         match self {
             MessageParser::V2(stream, decryptor) => {
