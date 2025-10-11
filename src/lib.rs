@@ -40,10 +40,6 @@
 //!     requester.shutdown();
 //! }
 //! ```
-//!
-//! # Features
-//!
-//! `rusqlite`: use the default `rusqlite` database implementations. Default and recommend feature.
 
 #![warn(missing_docs)]
 pub mod chain;
