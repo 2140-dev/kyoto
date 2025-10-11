@@ -45,13 +45,13 @@ const SEND_PING: Duration = Duration::from_secs(60 * 2);
 const MAX_FILTER_RESPONSE_TIME_SEC: Duration = Duration::from_secs(20);
 
 // These are the parameters of the "tried" and "new" tables
-const B_TRIED: usize = 64;
+const B_TRIED: usize = 4;
 const S_TRIED: usize = 16;
-const W_TRIED: usize = 16;
+const W_TRIED: usize = 2;
 
-const B_NEW: usize = 128;
+const B_NEW: usize = 16;
 const S_NEW: usize = 16;
-const W_NEW: usize = 16;
+const W_NEW: usize = 8;
 
 // Maximum occurrences of a single network address
 const MAX_ADDR: usize = 4;
