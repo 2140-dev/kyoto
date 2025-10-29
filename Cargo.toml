@@ -1,6 +1,6 @@
 [package]
 name = "bip157"
-version = "0.3.3"
+version = "0.3.4"
 authors = ["Rob <rob@2140.dev>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -12,7 +12,7 @@ categories = ["cryptography::cryptocurrencies"]
 rust-version = "1.84.0"
 
 [dependencies]
-addrman = { package = "bitcoin-address-book", version = "0.1.0" }
+addrman = { package = "bitcoin-address-book", version = "0.1.1" }
 bitcoin = { version = "0.32.7", default-features = false, features = [
     "rand-std",
 ] }
