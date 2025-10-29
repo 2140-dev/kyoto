@@ -31,7 +31,7 @@ pub(crate) mod reader;
 pub(crate) mod socks;
 
 pub const PROTOCOL_VERSION: u32 = 70016;
-pub const KYOTO_VERSION: &str = "0.3.3";
+pub const KYOTO_VERSION: &str = "0.3.4";
 pub const RUST_BITCOIN_VERSION: &str = "0.32.7";
 
 const THIRTY_MINS: Duration = Duration::from_secs(60 * 30);

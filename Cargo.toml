@@ -1,6 +1,6 @@
 [package]
 name = "bip157"
-version = "0.3.3"
+version = "0.3.4"
 authors = ["Rob <rob@2140.dev>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
