@@ -2,10 +2,9 @@ use bitcoin::{
     block::Header,
     hashes::Hash,
     p2p::{
-        address::AddrV2,
+        address::AddrV2Message,
         message_filter::{CFHeaders, CFilter, GetCFHeaders, GetCFilters},
         message_network::VersionMessage,
-        ServiceFlags,
     },
     Block, BlockHash, FeeRate, Wtxid,
 };
@@ -73,7 +72,7 @@ pub(crate) enum PeerMessage {
 #[derive(Debug)]
 pub(crate) enum ReaderMessage {
     Version(VersionMessage),
-    Addr(Vec<CombinedAddr>),
+    Addr(Vec<AddrV2Message>),
     Headers(Vec<Header>),
     FilterHeaders(CFHeaders),
     Filter(CFilter),
@@ -102,27 +101,6 @@ impl ReaderMessage {
             }
             _ => None,
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct CombinedAddr {
-    pub addr: AddrV2,
-    pub port: u16,
-    pub services: ServiceFlags,
-}
-
-impl CombinedAddr {
-    pub(crate) fn new(addr: AddrV2, port: u16) -> Self {
-        Self {
-            addr,
-            port,
-            services: ServiceFlags::NONE,
-        }
-    }
-
-    pub(crate) fn services(&mut self, services: ServiceFlags) {
-        self.services = services
     }
 }
 

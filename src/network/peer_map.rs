@@ -23,7 +23,7 @@ use tokio::{
 use crate::{
     broadcaster::BroadcastQueue,
     chain::HeightMonitor,
-    channel_messages::{CombinedAddr, MainThreadMessage, PeerThreadMessage},
+    channel_messages::{MainThreadMessage, PeerThreadMessage},
     default_port_from_network,
     network::{dns::bootstrap_dns, error::PeerError, peer::Peer, PeerId, PeerTimeoutConfig},
     Dialog, TrustedPeer,
@@ -243,7 +243,12 @@ impl PeerMap {
             crate::debug!(format!("Adding {} sourced from DNS", new_peers.len()));
             let addr_iter = new_peers
                 .into_iter()
-                .map(|ip| CombinedAddr::new(ip, default_port_from_network(&self.network)));
+                .map(|ip| bitcoin::p2p::address::AddrV2Message {
+                    time: 0,
+                    services: ServiceFlags::NONE,
+                    addr: ip,
+                    port: default_port_from_network(&self.network),
+                });
             let source = AddrV2::Ipv4(Ipv4Addr::new(1, 1, 1, 1));
             db_lock.add_gossiped(addr_iter, &source);
         }
