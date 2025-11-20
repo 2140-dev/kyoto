@@ -11,7 +11,11 @@ use bitcoin::{
     consensus::Decodable,
     io::Read,
     key::rand,
-    p2p::{address::AddrV2, message::CommandString, Magic},
+    p2p::{
+        address::{AddrV2, AddrV2Message},
+        message::CommandString,
+        Magic,
+    },
     BlockHash, Wtxid,
 };
 use socks::create_socks5;
@@ -19,7 +23,7 @@ use tokio::{net::TcpStream, time::Instant};
 
 use error::PeerError;
 
-use crate::channel_messages::{CombinedAddr, TimeSensitiveId};
+use crate::channel_messages::TimeSensitiveId;
 
 pub(crate) mod dns;
 pub(crate) mod error;
@@ -402,7 +406,7 @@ impl AddressBook {
 
     pub(crate) fn add_gossiped(
         &mut self,
-        gossip: impl Iterator<Item = CombinedAddr>,
+        gossip: impl Iterator<Item = AddrV2Message>,
         source: &AddrV2,
     ) {
         for addr in gossip {

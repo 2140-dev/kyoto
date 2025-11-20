@@ -1,12 +1,10 @@
-use std::net::IpAddr;
-
-use bitcoin::p2p::address::AddrV2;
+use bitcoin::p2p::address::AddrV2Message;
 use bitcoin::p2p::{message::NetworkMessage, message_blockdata::Inventory, ServiceFlags};
 use bitcoin::{FeeRate, Wtxid};
 use tokio::io::AsyncBufReadExt;
 use tokio::sync::mpsc::Sender;
 
-use crate::channel_messages::{CombinedAddr, ReaderMessage};
+use crate::channel_messages::ReaderMessage;
 use crate::messages::RejectPayload;
 
 use super::error::ReaderError;
@@ -44,33 +42,8 @@ impl<R: AsyncBufReadExt + Send + Sync + Unpin> Reader<R> {
         match message {
             NetworkMessage::Version(version) => Some(ReaderMessage::Version(version)),
             NetworkMessage::Verack => Some(ReaderMessage::Verack),
-            NetworkMessage::Addr(addresses) => {
-                if addresses.len() > MAX_ADDR {
-                    return Some(ReaderMessage::Disconnect);
-                }
-                let addresses: Vec<CombinedAddr> = addresses
-                    .iter()
-                    .map(|(_, addr)| addr)
-                    .filter(|addr| {
-                        addr.services.has(ServiceFlags::COMPACT_FILTERS)
-                            && addr.services.has(ServiceFlags::NETWORK)
-                    })
-                    .filter_map(|addr| addr.socket_addr().ok().map(|sock| (addr.port, sock)))
-                    .map(|(port, addr)| {
-                        let ip = match addr.ip() {
-                            IpAddr::V4(ip) => AddrV2::Ipv4(ip),
-                            IpAddr::V6(ip) => AddrV2::Ipv6(ip),
-                        };
-                        let mut addr = CombinedAddr::new(ip, port);
-                        addr.services(addr.services);
-                        addr
-                    })
-                    .collect();
-                if addresses.is_empty() {
-                    return None;
-                }
-                Some(ReaderMessage::Addr(addresses))
-            }
+            // If a peer is sending this message they are incredibly old or faulty.
+            NetworkMessage::Addr(_) => None,
             NetworkMessage::Inv(inventory) => {
                 if inventory.len() > MAX_INV {
                     return Some(ReaderMessage::Disconnect);
@@ -157,19 +130,13 @@ impl<R: AsyncBufReadExt + Send + Sync + Unpin> Reader<R> {
                 if addresses.len() > MAX_ADDR {
                     return Some(ReaderMessage::Disconnect);
                 }
-                let addresses: Vec<CombinedAddr> = addresses
+                let addresses = addresses
                     .into_iter()
                     .filter(|f| {
                         f.services.has(ServiceFlags::COMPACT_FILTERS)
                             && f.services.has(ServiceFlags::NETWORK)
                     })
-                    .map(|addr| {
-                        let port = addr.port;
-                        let mut ip = CombinedAddr::new(addr.addr, port);
-                        ip.services(addr.services);
-                        ip
-                    })
-                    .collect();
+                    .collect::<Vec<AddrV2Message>>();
                 if addresses.is_empty() {
                     return None;
                 }
