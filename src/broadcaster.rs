@@ -49,7 +49,7 @@ mod tests {
 
     #[derive(Debug, Clone)]
     struct HexTx(Transaction);
-    crate::prelude::impl_deserialize!(HexTx, Transaction);
+    crate::impl_deserialize!(HexTx, Transaction);
 
     #[derive(Debug, Clone, serde::Deserialize)]
     struct TransactionFile {

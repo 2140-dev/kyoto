@@ -24,10 +24,9 @@ use crate::{
     broadcaster::BroadcastQueue,
     chain::HeightMonitor,
     channel_messages::{CombinedAddr, MainThreadMessage, PeerThreadMessage},
-    dialog::Dialog,
+    default_port_from_network,
     network::{dns::bootstrap_dns, error::PeerError, peer::Peer, PeerId, PeerTimeoutConfig},
-    prelude::default_port_from_network,
-    TrustedPeer,
+    Dialog, TrustedPeer,
 };
 
 use super::{AddressBook, ConnectionType};

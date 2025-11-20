@@ -18,9 +18,8 @@ use super::{
 use crate::IndexedFilter;
 use crate::{
     chain::{header_batch::HeadersBatch, BlockHeaderChanges},
-    dialog::Dialog,
     messages::Event,
-    Info, Progress,
+    Dialog, Info, Progress,
 };
 
 const FILTER_BASIC: u8 = 0x00;
@@ -443,10 +442,8 @@ mod tests {
     use crate::chain::ChainState;
     use crate::{
         chain::checkpoints::HeaderCheckpoint,
-        {
-            dialog::Dialog,
-            messages::{Event, Info, Warning},
-        },
+        messages::{Event, Info, Warning},
+        Dialog,
     };
 
     use super::{CFHeaderChanges, Chain, HeightMonitor};
@@ -478,7 +475,7 @@ mod tests {
 
     #[derive(Debug, Clone)]
     struct HexHeader(Header);
-    crate::prelude::impl_deserialize!(HexHeader, Header);
+    crate::impl_deserialize!(HexHeader, Header);
 
     #[derive(Debug, Clone)]
     struct HexFilter(Vec<u8>);
@@ -496,7 +493,7 @@ mod tests {
 
     #[derive(Debug, Clone)]
     struct HexPrevHeader(FilterHeader);
-    crate::prelude::impl_deserialize!(HexPrevHeader, FilterHeader);
+    crate::impl_deserialize!(HexPrevHeader, FilterHeader);
 
     #[derive(Debug, Clone, serde::Deserialize)]
     struct BlockData {

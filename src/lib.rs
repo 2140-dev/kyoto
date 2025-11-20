@@ -44,9 +44,9 @@
 #![warn(missing_docs)]
 pub mod chain;
 
+use crate::network::{ConnectionType, PeerTimeoutConfig};
+
 mod network;
-mod prelude;
-pub(crate) use prelude::impl_sourceless_error;
 
 mod broadcaster;
 /// Convenient way to build a compact filters node.
@@ -54,9 +54,6 @@ pub mod builder;
 pub(crate) mod channel_messages;
 /// Structures to communicate with a node.
 pub mod client;
-/// Node configuration options.
-pub(crate) mod config;
-pub(crate) mod dialog;
 /// Errors associated with a node.
 pub mod error;
 /// Messages the node may send a client.
@@ -67,6 +64,7 @@ pub mod node;
 use chain::Filter;
 
 use std::net::{IpAddr, SocketAddr};
+use std::path::PathBuf;
 
 // Re-exports
 #[doc(inline)]
@@ -74,12 +72,16 @@ pub use chain::checkpoints::HeaderCheckpoint;
 
 #[doc(inline)]
 pub use tokio::sync::mpsc::Receiver;
+use tokio::sync::mpsc::Sender;
+
 #[doc(inline)]
 pub use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::UnboundedSender;
 
 #[doc(inline)]
 pub use {
     crate::builder::Builder,
+    crate::chain::ChainState,
     crate::client::{Client, Requester},
     crate::error::{ClientError, NodeError},
     crate::messages::{Event, Info, Progress, RejectPayload, SyncUpdate, Warning},
@@ -325,6 +327,28 @@ enum NodeState {
     FiltersSynced,
 }
 
+#[derive(Debug)]
+struct Config {
+    required_peers: u8,
+    white_list: Vec<TrustedPeer>,
+    data_path: Option<PathBuf>,
+    chain_state: Option<ChainState>,
+    connection_type: ConnectionType,
+    peer_timeout_config: PeerTimeoutConfig,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            required_peers: 1,
+            white_list: Default::default(),
+            data_path: Default::default(),
+            chain_state: Default::default(),
+            connection_type: Default::default(),
+            peer_timeout_config: PeerTimeoutConfig::default(),
+        }
+    }
+}
 /// Query a Bitcoin DNS seeder.
 ///
 /// This is **not** a generic DNS implementation. It is specifically tailored to query and parse DNS for Bitcoin seeders.
@@ -347,6 +371,61 @@ pub async fn lookup_host<S: AsRef<str>>(hostname: S) -> Vec<IpAddr> {
     crate::network::dns::lookup_hostname(hostname.as_ref()).await
 }
 
+fn default_port_from_network(network: &Network) -> u16 {
+    match network {
+        Network::Bitcoin => 8333,
+        Network::Testnet => 18333,
+        Network::Testnet4 => 48333,
+        Network::Signet => 38333,
+        Network::Regtest => 18444,
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Dialog {
+    info_tx: Sender<Info>,
+    warn_tx: UnboundedSender<Warning>,
+    event_tx: UnboundedSender<Event>,
+}
+
+impl Dialog {
+    fn new(
+        info_tx: Sender<Info>,
+        warn_tx: UnboundedSender<Warning>,
+        event_tx: UnboundedSender<Event>,
+    ) -> Self {
+        Self {
+            info_tx,
+            warn_tx,
+            event_tx,
+        }
+    }
+
+    fn send_warning(&self, warning: Warning) {
+        let _ = self.warn_tx.send(warning);
+    }
+
+    async fn send_info(&self, info: Info) {
+        let _ = self.info_tx.send(info).await;
+    }
+
+    fn send_event(&self, message: Event) {
+        let _ = self.event_tx.send(message);
+    }
+}
+
+macro_rules! impl_sourceless_error {
+    ($e:ident) => {
+        impl std::error::Error for $e {
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                None
+            }
+        }
+    };
+}
+
+pub(crate) use impl_sourceless_error;
+
 macro_rules! debug {
     ($expr:expr) => {
         #[cfg(debug_assertions)]
@@ -355,3 +434,24 @@ macro_rules! debug {
 }
 
 pub(crate) use debug;
+
+#[cfg(test)]
+macro_rules! impl_deserialize {
+    ($t:ident, $for:ident) => {
+        impl<'de> serde::Deserialize<'de> for $t {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                let s = String::deserialize(deserializer)?;
+                let bytes = hex::decode(&s).map_err(serde::de::Error::custom)?;
+                let bitcoin_type: $for =
+                    bitcoin::consensus::deserialize(&bytes).map_err(serde::de::Error::custom)?;
+                Ok($t(bitcoin_type))
+            }
+        }
+    };
+}
+
+#[cfg(test)]
+pub(crate) use impl_deserialize;

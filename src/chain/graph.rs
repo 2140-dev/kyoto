@@ -531,7 +531,7 @@ mod tests {
 
     #[derive(Debug, Clone)]
     struct HexHeader(Header);
-    crate::prelude::impl_deserialize!(HexHeader, Header);
+    crate::impl_deserialize!(HexHeader, Header);
 
     #[derive(Debug, Clone, serde::Deserialize)]
     struct GraphScenario {
