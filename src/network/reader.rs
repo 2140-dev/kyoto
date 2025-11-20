@@ -1,21 +1,32 @@
-use bitcoin::p2p::address::AddrV2Message;
-use bitcoin::p2p::{message::NetworkMessage, message_blockdata::Inventory, ServiceFlags};
+use bitcoin::{
+    block::Header,
+    hashes::Hash,
+    p2p::{
+        address::AddrV2Message,
+        message::NetworkMessage,
+        message_blockdata::Inventory,
+        message_filter::{CFHeaders, CFilter},
+        message_network::VersionMessage,
+        ServiceFlags,
+    },
+    Block, BlockHash,
+};
 use bitcoin::{FeeRate, Wtxid};
 use tokio::io::AsyncBufReadExt;
 use tokio::sync::mpsc::Sender;
 
-use crate::channel_messages::ReaderMessage;
 use crate::messages::RejectPayload;
 
 use super::error::ReaderError;
 use super::parsers::MessageParser;
+use super::TimeSensitiveId;
 
 // From Bitcoin Core PR #29575
 const MAX_ADDR: usize = 1_000;
 const MAX_INV: usize = 50_000;
 const MAX_HEADERS: usize = 2_000;
 
-pub(crate) struct Reader<R: AsyncBufReadExt + Send + Sync + Unpin> {
+pub(in crate::network) struct Reader<R: AsyncBufReadExt + Send + Sync + Unpin> {
     parser: MessageParser<R>,
     tx: Sender<ReaderMessage>,
 }
@@ -25,7 +36,7 @@ impl<R: AsyncBufReadExt + Send + Sync + Unpin> Reader<R> {
         Self { parser, tx }
     }
 
-    pub(crate) async fn read_from_remote(&mut self) -> Result<(), ReaderError> {
+    pub(in crate::network) async fn read_from_remote(&mut self) -> Result<(), ReaderError> {
         loop {
             if let Some(message) = self.parser.read_message().await? {
                 let cleaned_message = self.parse_message(message);
@@ -145,6 +156,41 @@ impl<R: AsyncBufReadExt + Send + Sync + Unpin> Reader<R> {
             NetworkMessage::SendAddrV2 => None,
             #[allow(unused)]
             NetworkMessage::Unknown { command, payload } => Some(ReaderMessage::Disconnect),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(in crate::network) enum ReaderMessage {
+    Version(VersionMessage),
+    Addr(Vec<AddrV2Message>),
+    Headers(Vec<Header>),
+    FilterHeaders(CFHeaders),
+    Filter(CFilter),
+    Block(Block),
+    NewBlocks(Vec<BlockHash>),
+    Reject(RejectPayload),
+    Disconnect,
+    Verack,
+    Ping(u64),
+    #[allow(dead_code)]
+    Pong(u64),
+    FeeFilter(FeeRate),
+    TxRequests(Vec<Wtxid>),
+}
+
+impl ReaderMessage {
+    pub(in crate::network) fn time_sensitive_message_received(&self) -> Option<TimeSensitiveId> {
+        match self {
+            ReaderMessage::Headers(_) => Some(TimeSensitiveId::HEADER_MSG),
+            ReaderMessage::FilterHeaders(_) => Some(TimeSensitiveId::CF_HEADER_MSG),
+            ReaderMessage::Filter(_) => Some(TimeSensitiveId::C_FILTER_MSG),
+            ReaderMessage::Pong(_) => Some(TimeSensitiveId::PING),
+            ReaderMessage::Block(b) => {
+                let hash = *b.block_hash().to_raw_hash().as_byte_array();
+                Some(TimeSensitiveId::from_slice(hash))
+            }
+            _ => None,
         }
     }
 }

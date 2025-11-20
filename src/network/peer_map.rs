@@ -23,13 +23,12 @@ use tokio::{
 use crate::{
     broadcaster::BroadcastQueue,
     chain::HeightMonitor,
-    channel_messages::{MainThreadMessage, PeerThreadMessage},
     default_port_from_network,
     network::{dns::bootstrap_dns, error::PeerError, peer::Peer, PeerId, PeerTimeoutConfig},
     Dialog, TrustedPeer,
 };
 
-use super::{AddressBook, ConnectionType};
+use super::{AddressBook, ConnectionType, MainThreadMessage, PeerThreadMessage};
 
 const LOCAL_HOST: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 

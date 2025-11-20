@@ -51,7 +51,6 @@ mod network;
 mod broadcaster;
 /// Convenient way to build a compact filters node.
 pub mod builder;
-pub(crate) mod channel_messages;
 /// Structures to communicate with a node.
 pub mod client;
 /// Errors associated with a node.
