@@ -102,7 +102,7 @@ impl Peer {
                 (outbound_messages, reader)
             };
 
-        let message = outbound_messages.version_message(None)?;
+        let message = outbound_messages.version_message(None);
         self.write_bytes(&mut writer, message).await?;
         self.message_state.start_version_handshake();
         let read_handle = tokio::spawn(async move { peer_reader.read_from_remote().await });
@@ -113,7 +113,7 @@ impl Peer {
                 return Ok(());
             }
             if let Some(nonce) = self.message_state.ping_state.send_ping() {
-                let msg = outbound_messages.ping(nonce)?;
+                let msg = outbound_messages.ping(nonce);
                 self.write_bytes(&mut writer, msg).await?;
                 let msg_id = TimeSensitiveId::PING;
                 self.message_state
@@ -261,7 +261,7 @@ impl Peer {
                 for wtxid in requests {
                     let transaction = tx_queue.fetch_tx(wtxid);
                     if let Some(transaction) = transaction {
-                        let msg = message_generator.broadcast_transaction(transaction)?;
+                        let msg = message_generator.broadcast_transaction(transaction);
                         self.write_bytes(writer, msg).await?;
                         self.message_state.sent_tx(wtxid);
                         tx_queue.successful(wtxid);
@@ -285,7 +285,7 @@ impl Peer {
                 Ok(())
             }
             ReaderMessage::Ping(nonce) => {
-                let message = message_generator.pong(nonce)?;
+                let message = message_generator.pong(nonce);
                 self.write_bytes(writer, message).await?;
                 Ok(())
             }
@@ -333,38 +333,38 @@ impl Peer {
         }
         match request {
             MainThreadMessage::GetAddr => {
-                let message = message_generator.addr()?;
+                let message = message_generator.addr();
                 self.write_bytes(writer, message).await?;
             }
             MainThreadMessage::GetAddrV2 => {
-                let message = message_generator.addrv2()?;
+                let message = message_generator.addrv2();
                 self.write_bytes(writer, message).await?;
             }
             MainThreadMessage::WtxidRelay => {
-                let message = message_generator.wtxid_relay()?;
+                let message = message_generator.wtxid_relay();
                 self.write_bytes(writer, message).await?;
             }
             MainThreadMessage::SendHeaders => {
-                let message = message_generator.sendheaders()?;
+                let message = message_generator.sendheaders();
                 self.write_bytes(writer, message).await?;
             }
             MainThreadMessage::GetHeaders(config) => {
-                let message = message_generator.headers(config)?;
+                let message = message_generator.headers(config);
                 self.write_bytes(writer, message).await?;
             }
             MainThreadMessage::GetFilterHeaders(config) => {
-                let message = message_generator.cf_headers(config)?;
+                let message = message_generator.cf_headers(config);
                 self.write_bytes(writer, message).await?;
             }
             MainThreadMessage::GetFilters(config) => {
                 self.message_state
                     .filter_rate
                     .batch_requested(config.stop_hash);
-                let message = message_generator.filters(config)?;
+                let message = message_generator.filters(config);
                 self.write_bytes(writer, message).await?;
             }
             MainThreadMessage::GetBlock(message) => {
-                let message = message_generator.block(message)?;
+                let message = message_generator.block(message);
                 self.write_bytes(writer, message).await?;
             }
             MainThreadMessage::BroadcastPending => {
@@ -377,12 +377,12 @@ impl Peer {
                     queue.pending_wtxid()
                 };
                 if !wtxids.is_empty() {
-                    let message = message_generator.announce_transactions(wtxids)?;
+                    let message = message_generator.announce_transactions(wtxids);
                     self.write_bytes(writer, message).await?;
                 }
             }
             MainThreadMessage::Verack => {
-                let message = message_generator.verack()?;
+                let message = message_generator.verack();
                 self.write_bytes(writer, message).await?;
                 self.message_state.verack.sent_ack();
                 if self.message_state.verack.both_acks() {
@@ -395,7 +395,7 @@ impl Peer {
                     queue.pending_wtxid()
                 };
                 if !wtxids.is_empty() {
-                    let message = message_generator.announce_transactions(wtxids)?;
+                    let message = message_generator.announce_transactions(wtxids);
                     self.write_bytes(writer, message).await?;
                 }
             }
