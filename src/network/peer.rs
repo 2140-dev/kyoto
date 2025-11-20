@@ -15,21 +15,15 @@ use tokio::{
     time::{Instant, MissedTickBehavior},
 };
 
-use crate::{
-    broadcaster::BroadcastQueue,
-    channel_messages::{
-        MainThreadMessage, PeerMessage, PeerThreadMessage, ReaderMessage, TimeSensitiveId,
-    },
-    messages::Warning,
-    Dialog, Info,
-};
+use crate::{broadcaster::BroadcastQueue, messages::Warning, Dialog, Info};
 
 use super::{
     error::PeerError,
     outbound_messages::{MessageGenerator, Transport},
     parsers::MessageParser,
-    reader::Reader,
-    AddressBook, MessageState, PeerId, PeerTimeoutConfig,
+    reader::{Reader, ReaderMessage},
+    AddressBook, MainThreadMessage, MessageState, PeerId, PeerMessage, PeerThreadMessage,
+    PeerTimeoutConfig, TimeSensitiveId,
 };
 
 const LOOP_TIMEOUT: Duration = Duration::from_millis(500);
@@ -355,7 +349,7 @@ impl Peer {
                 self.write_bytes(writer, message).await?;
             }
             MainThreadMessage::GetHeaders(config) => {
-                let message = message_generator.headers(config.locators, config.stop_hash)?;
+                let message = message_generator.headers(config)?;
                 self.write_bytes(writer, message).await?;
             }
             MainThreadMessage::GetFilterHeaders(config) => {

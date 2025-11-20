@@ -2,7 +2,9 @@ use std::{sync::Arc, time::Duration};
 
 use bitcoin::{
     block::Header,
+    hashes::Hash,
     p2p::{
+        message_blockdata::GetHeadersMessage,
         message_filter::{CFHeaders, CFilter},
         message_network::VersionMessage,
         ServiceFlags,
@@ -31,12 +33,14 @@ use crate::{
     },
     error::FetchBlockError,
     messages::ClientRequest,
-    network::{peer_map::PeerMap, LastBlockMonitor, PeerId},
+    network::{
+        peer_map::PeerMap, LastBlockMonitor, MainThreadMessage, PeerId, PeerMessage,
+        PeerThreadMessage,
+    },
     Config, IndexedBlock, NodeState, TxBroadcast, TxBroadcastPolicy,
 };
 
 use super::{
-    channel_messages::{GetHeaderConfig, MainThreadMessage, PeerMessage, PeerThreadMessage},
     client::Client,
     error::NodeError,
     messages::{ClientMessage, Event, Info, SyncUpdate, Warning},
@@ -356,9 +360,10 @@ impl Node {
     // requested next.
     async fn next_stateful_message(&mut self) -> Option<MainThreadMessage> {
         if !self.chain.is_synced().await {
-            let headers = GetHeaderConfig {
-                locators: self.chain.header_chain.locators(),
-                stop_hash: None,
+            let headers = GetHeadersMessage {
+                version: WTXID_VERSION,
+                locator_hashes: self.chain.header_chain.locators(),
+                stop_hash: BlockHash::all_zeros(),
             };
             return Some(MainThreadMessage::GetHeaders(headers));
         } else if !self.chain.is_cf_headers_synced() {
@@ -415,9 +420,10 @@ impl Node {
             self.dialog.send_info(Info::ConnectionsMet).await;
         }
         // Even if we start the node as caught up in terms of height, we need to check for reorgs. So we can send this unconditionally.
-        let next_headers = GetHeaderConfig {
-            locators: self.chain.header_chain.locators(),
-            stop_hash: None,
+        let next_headers = GetHeadersMessage {
+            version: WTXID_VERSION,
+            locator_hashes: self.chain.header_chain.locators(),
+            stop_hash: BlockHash::all_zeros(),
         };
         Ok(MainThreadMessage::GetHeaders(next_headers))
     }
@@ -598,9 +604,10 @@ impl Node {
                     .any(|block| !self.chain.header_chain.contains(block))
                 {
                     self.state = NodeState::Behind;
-                    let next_headers = GetHeaderConfig {
-                        locators: self.chain.header_chain.locators(),
-                        stop_hash: None,
+                    let next_headers = GetHeadersMessage {
+                        version: WTXID_VERSION,
+                        locator_hashes: self.chain.header_chain.locators(),
+                        stop_hash: BlockHash::all_zeros(),
                     };
                     self.chain.clear_compact_filter_queue();
                     Some(MainThreadMessage::GetHeaders(next_headers))

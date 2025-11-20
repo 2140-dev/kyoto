@@ -8,22 +8,25 @@ use std::{
 
 use addrman::{io::FileExt, Record, Table};
 use bitcoin::{
+    block::Header,
     consensus::Decodable,
+    hashes::Hash,
     io::Read,
     key::rand,
     p2p::{
         address::{AddrV2, AddrV2Message},
         message::CommandString,
+        message_blockdata::GetHeadersMessage,
+        message_filter::{CFHeaders, CFilter, GetCFHeaders, GetCFilters},
+        message_network::VersionMessage,
         Magic,
     },
-    BlockHash, Wtxid,
+    Block, BlockHash, FeeRate, Wtxid,
 };
 use socks::create_socks5;
 use tokio::{net::TcpStream, time::Instant};
 
 use error::PeerError;
-
-use crate::channel_messages::TimeSensitiveId;
 
 pub(crate) mod dns;
 pub(crate) mod error;
@@ -68,7 +71,7 @@ const MAX_WEEKLY_ATTEMPTS: u8 = 1;
 pub(crate) struct PeerId(pub(crate) u32);
 
 impl PeerId {
-    pub(crate) fn increment(&mut self) {
+    fn increment(&mut self) {
         self.0 = self.0.wrapping_add(1)
     }
 }
@@ -366,7 +369,79 @@ impl FilterRate {
     }
 }
 
-pub(crate) struct V1Header {
+#[derive(Debug, Clone, Copy, std::hash::Hash, PartialEq, Eq, PartialOrd, Ord)]
+struct TimeSensitiveId([u8; 32]);
+
+impl TimeSensitiveId {
+    const HEADER_MSG: Self = Self([1; 32]);
+
+    const CF_HEADER_MSG: Self = Self([2; 32]);
+
+    const C_FILTER_MSG: Self = Self([3; 32]);
+
+    const PING: Self = Self([4; 32]);
+
+    fn from_slice(slice: [u8; 32]) -> Self {
+        Self(slice)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum MainThreadMessage {
+    GetAddr,
+    GetAddrV2,
+    WtxidRelay,
+    #[allow(unused)]
+    SendHeaders,
+    GetHeaders(GetHeadersMessage),
+    GetFilterHeaders(GetCFHeaders),
+    GetFilters(GetCFilters),
+    GetBlock(BlockHash),
+    Disconnect,
+    BroadcastPending,
+    Verack,
+}
+
+impl MainThreadMessage {
+    pub(in crate::network) fn time_sensitive_message_start(
+        &self,
+    ) -> Option<(TimeSensitiveId, Instant)> {
+        match self {
+            MainThreadMessage::GetHeaders(_) => Some((TimeSensitiveId::HEADER_MSG, Instant::now())),
+            MainThreadMessage::GetFilterHeaders(_) => {
+                Some((TimeSensitiveId::CF_HEADER_MSG, Instant::now()))
+            }
+            MainThreadMessage::GetFilters(_) => {
+                Some((TimeSensitiveId::C_FILTER_MSG, Instant::now()))
+            }
+            MainThreadMessage::GetBlock(hash) => {
+                let id = hash.to_raw_hash().to_byte_array();
+                Some((TimeSensitiveId::from_slice(id), Instant::now()))
+            }
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct PeerThreadMessage {
+    pub nonce: PeerId,
+    pub message: PeerMessage,
+}
+
+#[derive(Debug)]
+pub(crate) enum PeerMessage {
+    Version(VersionMessage),
+    Headers(Vec<Header>),
+    FilterHeaders(CFHeaders),
+    Filter(CFilter),
+    Block(Block),
+    NewBlocks(Vec<BlockHash>),
+    FeeFilter(FeeRate),
+}
+
+#[derive(Debug)]
+struct V1Header {
     magic: Magic,
     _command: CommandString,
     length: u32,

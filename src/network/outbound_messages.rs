@@ -6,7 +6,6 @@ use std::{
 use bip324::{PacketType, PacketWriter};
 use bitcoin::{
     consensus::serialize,
-    hashes::Hash,
     p2p::{
         message::{NetworkMessage, RawNetworkMessage},
         message_blockdata::{GetHeadersMessage, Inventory},
@@ -76,13 +75,7 @@ impl MessageGenerator {
         self.serialize(msg)
     }
 
-    pub(crate) fn headers(
-        &mut self,
-        locator_hashes: Vec<BlockHash>,
-        stop_hash: Option<BlockHash>,
-    ) -> Result<Vec<u8>, PeerError> {
-        let msg =
-            GetHeadersMessage::new(locator_hashes, stop_hash.unwrap_or(BlockHash::all_zeros()));
+    pub(crate) fn headers(&mut self, msg: GetHeadersMessage) -> Result<Vec<u8>, PeerError> {
         let msg = NetworkMessage::GetHeaders(msg);
         self.serialize(msg)
     }
