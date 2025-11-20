@@ -50,31 +50,6 @@ impl MessageGenerator {
         self.serialize(msg)
     }
 
-    pub(in crate::network) fn verack(&mut self) -> Vec<u8> {
-        let msg = NetworkMessage::Verack;
-        self.serialize(msg)
-    }
-
-    pub(in crate::network) fn addr(&mut self) -> Vec<u8> {
-        let msg = NetworkMessage::GetAddr;
-        self.serialize(msg)
-    }
-
-    pub(in crate::network) fn addrv2(&mut self) -> Vec<u8> {
-        let msg = NetworkMessage::SendAddrV2;
-        self.serialize(msg)
-    }
-
-    pub(in crate::network) fn wtxid_relay(&mut self) -> Vec<u8> {
-        let msg = NetworkMessage::WtxidRelay;
-        self.serialize(msg)
-    }
-
-    pub(in crate::network) fn sendheaders(&mut self) -> Vec<u8> {
-        let msg = NetworkMessage::SendHeaders;
-        self.serialize(msg)
-    }
-
     pub(in crate::network) fn headers(&mut self, msg: GetHeadersMessage) -> Vec<u8> {
         let msg = NetworkMessage::GetHeaders(msg);
         self.serialize(msg)

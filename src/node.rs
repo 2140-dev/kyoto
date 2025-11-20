@@ -401,7 +401,7 @@ impl Node {
         self.peer_map.tried(nonce).await;
         // First we signal for ADDRV2 support
         self.peer_map
-            .send_message(nonce, MainThreadMessage::GetAddrV2)
+            .send_message(nonce, MainThreadMessage::SendAddrV2)
             .await;
         // Then for BIP 339 witness transaction broadcast
         self.peer_map

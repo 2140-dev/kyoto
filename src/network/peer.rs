@@ -3,7 +3,10 @@ use std::{sync::Arc, time::Duration};
 
 use addrman::Record;
 use bip324::{AsyncProtocol, PacketReader, PacketWriter, Role};
-use bitcoin::{p2p::ServiceFlags, Network};
+use bitcoin::{
+    p2p::{message::NetworkMessage, ServiceFlags},
+    Network,
+};
 use tokio::{
     io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
     net::TcpStream,
@@ -333,19 +336,19 @@ impl Peer {
         }
         match request {
             MainThreadMessage::GetAddr => {
-                let message = message_generator.addr();
+                let message = message_generator.serialize(NetworkMessage::GetAddr);
                 self.write_bytes(writer, message).await?;
             }
-            MainThreadMessage::GetAddrV2 => {
-                let message = message_generator.addrv2();
+            MainThreadMessage::SendAddrV2 => {
+                let message = message_generator.serialize(NetworkMessage::SendAddrV2);
                 self.write_bytes(writer, message).await?;
             }
             MainThreadMessage::WtxidRelay => {
-                let message = message_generator.wtxid_relay();
+                let message = message_generator.serialize(NetworkMessage::WtxidRelay);
                 self.write_bytes(writer, message).await?;
             }
             MainThreadMessage::SendHeaders => {
-                let message = message_generator.sendheaders();
+                let message = message_generator.serialize(NetworkMessage::SendHeaders);
                 self.write_bytes(writer, message).await?;
             }
             MainThreadMessage::GetHeaders(config) => {
@@ -382,7 +385,7 @@ impl Peer {
                 }
             }
             MainThreadMessage::Verack => {
-                let message = message_generator.verack();
+                let message = message_generator.serialize(NetworkMessage::Verack);
                 self.write_bytes(writer, message).await?;
                 self.message_state.verack.sent_ack();
                 if self.message_state.verack.both_acks() {

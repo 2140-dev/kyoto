@@ -389,7 +389,7 @@ impl TimeSensitiveId {
 #[derive(Debug, Clone)]
 pub(crate) enum MainThreadMessage {
     GetAddr,
-    GetAddrV2,
+    SendAddrV2,
     WtxidRelay,
     #[allow(unused)]
     SendHeaders,
