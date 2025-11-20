@@ -17,7 +17,7 @@ use bitcoin::{
     BlockHash, Network, Transaction, Wtxid,
 };
 
-use crate::prelude::default_port_from_network;
+use crate::default_port_from_network;
 
 use super::{error::PeerError, KYOTO_VERSION, PROTOCOL_VERSION, RUST_BITCOIN_VERSION};
 

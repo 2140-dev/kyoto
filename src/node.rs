@@ -32,16 +32,15 @@ use crate::{
     error::FetchBlockError,
     messages::ClientRequest,
     network::{peer_map::PeerMap, LastBlockMonitor, PeerId},
-    IndexedBlock, NodeState, TxBroadcast, TxBroadcastPolicy,
+    Config, IndexedBlock, NodeState, TxBroadcast, TxBroadcastPolicy,
 };
 
 use super::{
     channel_messages::{GetHeaderConfig, MainThreadMessage, PeerMessage, PeerThreadMessage},
     client::Client,
-    config::NodeConfig,
-    dialog::Dialog,
     error::NodeError,
     messages::{ClientMessage, Event, Info, SyncUpdate, Warning},
+    Dialog,
 };
 
 pub(crate) const WTXID_VERSION: u32 = 70016;
@@ -63,8 +62,8 @@ pub struct Node {
 }
 
 impl Node {
-    pub(crate) fn new(network: Network, config: NodeConfig) -> (Self, Client) {
-        let NodeConfig {
+    pub(crate) fn new(network: Network, config: Config) -> (Self, Client) {
+        let Config {
             required_peers,
             white_list,
             data_path: _,

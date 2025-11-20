@@ -20,9 +20,8 @@ use crate::{
     channel_messages::{
         MainThreadMessage, PeerMessage, PeerThreadMessage, ReaderMessage, TimeSensitiveId,
     },
-    dialog::Dialog,
     messages::Warning,
-    Info,
+    Dialog, Info,
 };
 
 use super::{

@@ -3,9 +3,10 @@ use std::{path::PathBuf, time::Duration};
 
 use bitcoin::Network;
 
-use super::{client::Client, config::NodeConfig, node::Node};
+use super::{client::Client, node::Node};
 use crate::chain::ChainState;
 use crate::network::ConnectionType;
+use crate::Config;
 use crate::TrustedPeer;
 
 const MIN_PEERS: u8 = 1;
@@ -30,7 +31,7 @@ const MAX_PEERS: u8 = 15;
 /// ```
 #[derive(Debug)]
 pub struct Builder {
-    config: NodeConfig,
+    config: Config,
     network: Network,
 }
 
@@ -38,7 +39,7 @@ impl Builder {
     /// Create a new [`Builder`].
     pub fn new(network: Network) -> Self {
         Self {
-            config: NodeConfig::default(),
+            config: Config::default(),
             network,
         }
     }
