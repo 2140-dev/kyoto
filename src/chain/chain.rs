@@ -13,14 +13,10 @@ use super::{
     error::{CFHeaderSyncError, CFilterSyncError, HeaderSyncError},
     graph::{AcceptHeaderChanges, BlockTree, HeaderRejection},
     CFHeaderChanges, ChainState, Filter, FilterCheck, FilterHeaderRequest, FilterRequest,
-    FilterRequestState, HeightMonitor, PeerId,
+    FilterRequestState, HeaderValidationExt, HeightMonitor, PeerId,
 };
 use crate::IndexedFilter;
-use crate::{
-    chain::{header_batch::HeadersBatch, BlockHeaderChanges},
-    messages::Event,
-    Dialog, Info, Progress,
-};
+use crate::{chain::BlockHeaderChanges, messages::Event, Dialog, Info, Progress};
 
 const FILTER_BASIC: u8 = 0x00;
 const CF_HEADER_BATCH_SIZE: u32 = 1_999;
@@ -91,11 +87,18 @@ impl Chain {
     // Sync the chain with headers from a peer, adjusting to reorgs if needed
     pub(crate) fn sync_chain(
         &mut self,
-        message: Vec<Header>,
+        header_batch: Vec<Header>,
     ) -> Result<Vec<BlockHash>, HeaderSyncError> {
-        let header_batch = HeadersBatch::new(message).map_err(|_| HeaderSyncError::EmptyMessage)?;
+        if header_batch.is_empty() {
+            return Err(HeaderSyncError::EmptyMessage);
+        }
         // If our chain already has the last header in the message there is no new information
-        if self.header_chain.contains(header_batch.last().block_hash()) {
+        if self.header_chain.contains(
+            header_batch
+                .last()
+                .expect("non-empty check above.")
+                .block_hash(),
+        ) {
             return Ok(Vec::new());
         }
         // We check first if the peer is sending us nonsense
@@ -153,21 +156,16 @@ impl Chain {
     }
 
     // These are invariants in all batches of headers we receive
-    fn sanity_check(&mut self, header_batch: &HeadersBatch) -> Result<(), HeaderSyncError> {
-        // All the headers connect with each other and is the difficulty adjustment not absurd
+    fn sanity_check(&mut self, header_batch: &[Header]) -> Result<(), HeaderSyncError> {
         if !header_batch.connected() {
             return Err(HeaderSyncError::HeadersNotConnected);
         }
-
-        // All headers pass their own proof of work and the network minimum
-        if !header_batch.individually_valid_pow() {
+        if !header_batch.passes_own_pow() {
             return Err(HeaderSyncError::InvalidHeaderWork);
         }
-
-        if !header_batch.bits_adhere_transition(self.network) {
+        if !header_batch.bits_adhere_transition_threshold(self.network) {
             return Err(HeaderSyncError::InvalidBits);
         }
-
         Ok(())
     }
 
