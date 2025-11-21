@@ -11,7 +11,6 @@ pub mod checkpoints;
 #[allow(dead_code)]
 pub(crate) mod error;
 pub(crate) mod graph;
-pub(crate) mod header_batch;
 
 use std::collections::HashMap;
 
@@ -20,7 +19,7 @@ use bitcoin::hashes::{sha256d, Hash};
 use bitcoin::Amount;
 use bitcoin::{
     bip158::BlockFilter, block::Header, params::Params, BlockHash, FilterHash, FilterHeader,
-    ScriptBuf, Work,
+    ScriptBuf, Target, Work,
 };
 
 use crate::network::PeerId;
@@ -281,6 +280,42 @@ trait ZerolikeExt {
 impl ZerolikeExt for Work {
     fn zero() -> Self {
         Self::from_be_bytes([0; 32])
+    }
+}
+
+trait HeaderValidationExt {
+    // Headers are logically connected.
+    fn connected(&self) -> bool;
+    // Each header passes its own work target.
+    fn passes_own_pow(&self) -> bool;
+    // Targets do not change out of the acceptable range.
+    fn bits_adhere_transition_threshold(&self, params: impl AsRef<Params>) -> bool;
+}
+
+impl HeaderValidationExt for &[Header] {
+    fn connected(&self) -> bool {
+        self.iter()
+            .zip(self.iter().skip(1))
+            .all(|(first, second)| first.block_hash().eq(&second.prev_blockhash))
+    }
+
+    fn passes_own_pow(&self) -> bool {
+        !self.iter().any(|header| {
+            let target = header.target();
+            let valid_pow = header.validate_pow(target);
+            valid_pow.is_err()
+        })
+    }
+
+    fn bits_adhere_transition_threshold(&self, params: impl AsRef<Params>) -> bool {
+        let params = params.as_ref();
+        if params.allow_min_difficulty_blocks {
+            return true;
+        }
+        self.iter().zip(self.iter().skip(1)).all(|(first, second)| {
+            let transition = Target::from_compact(first.bits).max_transition_threshold(params);
+            Target::from_compact(second.bits).le(&transition)
+        })
     }
 }
 
