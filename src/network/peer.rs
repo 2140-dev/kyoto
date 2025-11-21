@@ -22,8 +22,8 @@ use crate::{broadcaster::BroadcastQueue, messages::Warning, Dialog, Info};
 
 use super::{
     error::PeerError,
-    outbound_messages::{MessageGenerator, Transport},
-    parsers::MessageParser,
+    inbound::MessageParser,
+    outbound::{MessageGenerator, Transport},
     reader::{Reader, ReaderMessage},
     AddressBook, MainThreadMessage, MessageState, PeerId, PeerMessage, PeerThreadMessage,
     PeerTimeoutConfig, TimeSensitiveId,
