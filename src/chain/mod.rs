@@ -2,7 +2,6 @@
 //!
 //! Notably, [`checkpoints`] contains known Bitcoin block hashes and heights with significant work, so Kyoto nodes do not have to sync from genesis.
 pub(crate) mod block_queue;
-mod cfheader_batch;
 #[allow(clippy::module_inception)]
 pub(crate) mod chain;
 /// Expected block header checkpoints and corresponding structure.
@@ -18,14 +17,12 @@ use bitcoin::constants::SUBSIDY_HALVING_INTERVAL;
 use bitcoin::hashes::{sha256d, Hash};
 use bitcoin::Amount;
 use bitcoin::{
-    bip158::BlockFilter, block::Header, params::Params, BlockHash, FilterHash, FilterHeader,
-    ScriptBuf, Target, Work,
+    bip158::BlockFilter, block::Header, p2p::message_filter::CFHeaders, params::Params, BlockHash,
+    FilterHash, FilterHeader, ScriptBuf, Target, Work,
 };
 
 use crate::network::PeerId;
 use crate::HeaderCheckpoint;
-
-use cfheader_batch::CFHeaderBatch;
 
 type Height = u32;
 
@@ -168,6 +165,55 @@ pub(crate) enum CFHeaderChanges {
     // Unfortunately, auditing each peer by reconstruction the filter would be costly in network
     // and compute. Instead it is easier to disconnect from all peers and try again.
     Conflict,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CFHeaderBatch {
+    inner: Vec<FilterCommitment>,
+    prev_filter_header: FilterHeader,
+    stop_hash: BlockHash,
+}
+
+impl CFHeaderBatch {
+    pub(crate) fn new(batch: CFHeaders) -> Self {
+        let mut headers: Vec<FilterCommitment> = vec![];
+        let mut prev_header = batch.previous_filter_header;
+        for hash in batch.filter_hashes {
+            let next_header = hash.filter_header(&prev_header);
+            headers.push(FilterCommitment {
+                header: next_header,
+                filter_hash: hash,
+            });
+            prev_header = next_header;
+        }
+        Self {
+            inner: headers,
+            prev_filter_header: batch.previous_filter_header,
+            stop_hash: batch.stop_hash,
+        }
+    }
+
+    fn prev_header(&self) -> &FilterHeader {
+        &self.prev_filter_header
+    }
+
+    fn stop_hash(&self) -> BlockHash {
+        self.stop_hash
+    }
+
+    fn len(&self) -> u32 {
+        self.inner.len() as u32
+    }
+
+    fn take_inner(&mut self) -> Vec<FilterCommitment> {
+        core::mem::take(&mut self.inner)
+    }
+}
+
+impl From<CFHeaders> for CFHeaderBatch {
+    fn from(val: CFHeaders) -> Self {
+        CFHeaderBatch::new(val)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
