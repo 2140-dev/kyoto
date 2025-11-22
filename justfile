@@ -1,6 +1,6 @@
 set ignore-comments
   
-# Hidden default lists all available recipies.
+# Hidden default lists all available recipes.
 _default:
   @just --list --list-heading $'KYOTO\n'
   
@@ -29,13 +29,13 @@ _test-integration:
 _test-sync: 
   cargo run --example bitcoin --release
 
-# Test feature flag matrix compatability.
+# Test feature flag matrix compatibility.
 _test-features:
   # Build and test with all features, no features, and some combinations.
   cargo test --lib --all-features
   cargo test --lib --no-default-features
 
-# Test that minimum versions of dependency contraints are still valid.
+# Test that minimum versions of dependency constraints are still valid.
 _test-min-versions:
   just _delete-lockfile
   cargo +nightly check --all-features -Z direct-minimal-versions
@@ -50,12 +50,9 @@ _test-msrv:
 example name="signet":
   cargo run --example {{name}} --release
 
-# Delete unused files or branches: data, lockfile, branches
-delete item="data":
+# Delete unused files or branches: lockfile, branches
+delete item="branches":
   just _delete-{{item}}
-
-_delete-data:
-  rm -rf light_client_data
 
 _delete-lockfile:
   rm -f Cargo.lock
