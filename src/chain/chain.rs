@@ -9,11 +9,10 @@ use bitcoin::{
 use tokio::sync::Mutex;
 
 use super::{
-    cfheader_batch::CFHeaderBatch,
     error::{CFHeaderSyncError, CFilterSyncError, HeaderSyncError},
     graph::{AcceptHeaderChanges, BlockTree, HeaderRejection},
-    CFHeaderChanges, ChainState, Filter, FilterCheck, FilterHeaderRequest, FilterRequest,
-    FilterRequestState, HeaderValidationExt, HeightMonitor, PeerId,
+    CFHeaderBatch, CFHeaderChanges, ChainState, Filter, FilterCheck, FilterHeaderRequest,
+    FilterRequest, FilterRequestState, HeaderValidationExt, HeightMonitor, PeerId,
 };
 use crate::IndexedFilter;
 use crate::{chain::BlockHeaderChanges, messages::Event, Dialog, Info, Progress};
