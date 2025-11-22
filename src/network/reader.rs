@@ -18,7 +18,7 @@ use tokio::sync::mpsc::Sender;
 use crate::messages::RejectPayload;
 
 use super::error::ReaderError;
-use super::parsers::MessageParser;
+use super::inbound::MessageParser;
 use super::TimeSensitiveId;
 
 // From Bitcoin Core PR #29575

@@ -18,125 +18,94 @@ use bitcoin::{
 
 use crate::default_port_from_network;
 
-use super::{error::PeerError, KYOTO_VERSION, PROTOCOL_VERSION, RUST_BITCOIN_VERSION};
+use super::{KYOTO_VERSION, PROTOCOL_VERSION, RUST_BITCOIN_VERSION};
 
 // Responsible for serializing messages to write over the wire, either encrypted or plaintext.
-pub(crate) struct MessageGenerator {
+pub(in crate::network) struct MessageGenerator {
     pub network: Network,
     pub transport: Transport,
 }
 
-pub(crate) enum Transport {
+pub(in crate::network) enum Transport {
     V1,
     V2 { encryptor: PacketWriter },
 }
 
 impl MessageGenerator {
-    fn serialize(&mut self, msg: NetworkMessage) -> Result<Vec<u8>, PeerError> {
+    pub(in crate::network) fn serialize(&mut self, msg: NetworkMessage) -> Vec<u8> {
         match &mut self.transport {
             Transport::V1 => {
                 let data = RawNetworkMessage::new(self.network.magic(), msg);
-                Ok(serialize(&data))
+                serialize(&data)
             }
             Transport::V2 { encryptor } => {
-                let plaintext = serialize_network_message(msg)?;
+                let plaintext = serialize_network_message(msg);
                 encrypt_plaintext(encryptor, plaintext)
             }
         }
     }
 
-    pub(crate) fn version_message(&mut self, port: Option<u16>) -> Result<Vec<u8>, PeerError> {
+    pub(in crate::network) fn version_message(&mut self, port: Option<u16>) -> Vec<u8> {
         let msg = NetworkMessage::Version(make_version(port, &self.network));
         self.serialize(msg)
     }
 
-    pub(crate) fn verack(&mut self) -> Result<Vec<u8>, PeerError> {
-        let msg = NetworkMessage::Verack;
-        self.serialize(msg)
-    }
-
-    pub(crate) fn addr(&mut self) -> Result<Vec<u8>, PeerError> {
-        let msg = NetworkMessage::GetAddr;
-        self.serialize(msg)
-    }
-
-    pub(crate) fn addrv2(&mut self) -> Result<Vec<u8>, PeerError> {
-        let msg = NetworkMessage::SendAddrV2;
-        self.serialize(msg)
-    }
-
-    pub(crate) fn wtxid_relay(&mut self) -> Result<Vec<u8>, PeerError> {
-        let msg = NetworkMessage::WtxidRelay;
-        self.serialize(msg)
-    }
-
-    pub(crate) fn sendheaders(&mut self) -> Result<Vec<u8>, PeerError> {
-        let msg = NetworkMessage::SendHeaders;
-        self.serialize(msg)
-    }
-
-    pub(crate) fn headers(&mut self, msg: GetHeadersMessage) -> Result<Vec<u8>, PeerError> {
+    pub(in crate::network) fn headers(&mut self, msg: GetHeadersMessage) -> Vec<u8> {
         let msg = NetworkMessage::GetHeaders(msg);
         self.serialize(msg)
     }
 
-    pub(crate) fn cf_headers(&mut self, message: GetCFHeaders) -> Result<Vec<u8>, PeerError> {
+    pub(in crate::network) fn cf_headers(&mut self, message: GetCFHeaders) -> Vec<u8> {
         let msg = NetworkMessage::GetCFHeaders(message);
         self.serialize(msg)
     }
 
-    pub(crate) fn filters(&mut self, message: GetCFilters) -> Result<Vec<u8>, PeerError> {
+    pub(in crate::network) fn filters(&mut self, message: GetCFilters) -> Vec<u8> {
         let msg = NetworkMessage::GetCFilters(message);
         self.serialize(msg)
     }
 
-    pub(crate) fn block(&mut self, hash: BlockHash) -> Result<Vec<u8>, PeerError> {
+    pub(in crate::network) fn block(&mut self, hash: BlockHash) -> Vec<u8> {
         let inv = Inventory::Block(hash);
         let msg = NetworkMessage::GetData(vec![inv]);
         self.serialize(msg)
     }
 
-    pub(crate) fn ping(&mut self, nonce: u64) -> Result<Vec<u8>, PeerError> {
+    pub(in crate::network) fn ping(&mut self, nonce: u64) -> Vec<u8> {
         let msg = NetworkMessage::Ping(nonce);
         self.serialize(msg)
     }
 
-    pub(crate) fn pong(&mut self, nonce: u64) -> Result<Vec<u8>, PeerError> {
+    pub(in crate::network) fn pong(&mut self, nonce: u64) -> Vec<u8> {
         let msg = NetworkMessage::Pong(nonce);
         self.serialize(msg)
     }
 
-    pub(crate) fn announce_transactions(
-        &mut self,
-        wtxids: Vec<Wtxid>,
-    ) -> Result<Vec<u8>, PeerError> {
+    pub(in crate::network) fn announce_transactions(&mut self, wtxids: Vec<Wtxid>) -> Vec<u8> {
         let msg = NetworkMessage::Inv(wtxids.into_iter().map(Inventory::WTx).collect());
         self.serialize(msg)
     }
 
-    pub(crate) fn broadcast_transaction(
+    pub(in crate::network) fn broadcast_transaction(
         &mut self,
         transaction: Transaction,
-    ) -> Result<Vec<u8>, PeerError> {
+    ) -> Vec<u8> {
         let msg = NetworkMessage::Tx(transaction);
         self.serialize(msg)
     }
 }
 
-fn serialize_network_message(message: NetworkMessage) -> Result<Vec<u8>, PeerError> {
-    bip324::serde::serialize(message).map_err(From::from)
+fn serialize_network_message(message: NetworkMessage) -> Vec<u8> {
+    bip324::serde::serialize(message).expect("in memory serialization cannot fail.")
 }
 
-fn encrypt_plaintext(
-    encryptor: &mut PacketWriter,
-    plaintext: Vec<u8>,
-) -> Result<Vec<u8>, PeerError> {
+fn encrypt_plaintext(encryptor: &mut PacketWriter, plaintext: Vec<u8>) -> Vec<u8> {
     encryptor
         .encrypt_packet(&plaintext, None, PacketType::Genuine)
-        .map_err(From::from)
+        .expect("encryption to in memory buffer cannot fail.")
 }
 
-fn make_version(port: Option<u16>, network: &Network) -> VersionMessage {
+pub(in crate::network) fn make_version(port: Option<u16>, network: &Network) -> VersionMessage {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("time went backwards")

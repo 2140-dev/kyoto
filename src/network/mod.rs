@@ -30,8 +30,8 @@ use error::PeerError;
 
 pub(crate) mod dns;
 pub(crate) mod error;
-pub(crate) mod outbound_messages;
-pub(crate) mod parsers;
+pub(crate) mod inbound;
+pub(crate) mod outbound;
 pub(crate) mod peer;
 pub(crate) mod peer_map;
 pub(crate) mod reader;
@@ -389,7 +389,7 @@ impl TimeSensitiveId {
 #[derive(Debug, Clone)]
 pub(crate) enum MainThreadMessage {
     GetAddr,
-    GetAddrV2,
+    SendAddrV2,
     WtxidRelay,
     #[allow(unused)]
     SendHeaders,
