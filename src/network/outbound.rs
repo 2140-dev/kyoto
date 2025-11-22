@@ -8,8 +8,7 @@ use bitcoin::{
     consensus::serialize,
     p2p::{
         message::{NetworkMessage, RawNetworkMessage},
-        message_blockdata::{GetHeadersMessage, Inventory},
-        message_filter::{GetCFHeaders, GetCFilters},
+        message_blockdata::Inventory,
         message_network::VersionMessage,
         Address, ServiceFlags,
     },
@@ -50,34 +49,9 @@ impl MessageGenerator {
         self.serialize(msg)
     }
 
-    pub(in crate::network) fn headers(&mut self, msg: GetHeadersMessage) -> Vec<u8> {
-        let msg = NetworkMessage::GetHeaders(msg);
-        self.serialize(msg)
-    }
-
-    pub(in crate::network) fn cf_headers(&mut self, message: GetCFHeaders) -> Vec<u8> {
-        let msg = NetworkMessage::GetCFHeaders(message);
-        self.serialize(msg)
-    }
-
-    pub(in crate::network) fn filters(&mut self, message: GetCFilters) -> Vec<u8> {
-        let msg = NetworkMessage::GetCFilters(message);
-        self.serialize(msg)
-    }
-
     pub(in crate::network) fn block(&mut self, hash: BlockHash) -> Vec<u8> {
         let inv = Inventory::Block(hash);
         let msg = NetworkMessage::GetData(vec![inv]);
-        self.serialize(msg)
-    }
-
-    pub(in crate::network) fn ping(&mut self, nonce: u64) -> Vec<u8> {
-        let msg = NetworkMessage::Ping(nonce);
-        self.serialize(msg)
-    }
-
-    pub(in crate::network) fn pong(&mut self, nonce: u64) -> Vec<u8> {
-        let msg = NetworkMessage::Pong(nonce);
         self.serialize(msg)
     }
 

@@ -116,7 +116,7 @@ impl Peer {
                 return Ok(());
             }
             if let Some(nonce) = self.message_state.ping_state.send_ping() {
-                let msg = outbound_messages.ping(nonce);
+                let msg = outbound_messages.serialize(NetworkMessage::Ping(nonce));
                 self.write_bytes(&mut writer, msg).await?;
                 let msg_id = TimeSensitiveId::PING;
                 self.message_state
@@ -288,7 +288,7 @@ impl Peer {
                 Ok(())
             }
             ReaderMessage::Ping(nonce) => {
-                let message = message_generator.pong(nonce);
+                let message = message_generator.serialize(NetworkMessage::Pong(nonce));
                 self.write_bytes(writer, message).await?;
                 Ok(())
             }
@@ -352,18 +352,18 @@ impl Peer {
                 self.write_bytes(writer, message).await?;
             }
             MainThreadMessage::GetHeaders(config) => {
-                let message = message_generator.headers(config);
+                let message = message_generator.serialize(NetworkMessage::GetHeaders(config));
                 self.write_bytes(writer, message).await?;
             }
             MainThreadMessage::GetFilterHeaders(config) => {
-                let message = message_generator.cf_headers(config);
+                let message = message_generator.serialize(NetworkMessage::GetCFHeaders(config));
                 self.write_bytes(writer, message).await?;
             }
             MainThreadMessage::GetFilters(config) => {
                 self.message_state
                     .filter_rate
                     .batch_requested(config.stop_hash);
-                let message = message_generator.filters(config);
+                let message = message_generator.serialize(NetworkMessage::GetCFilters(config));
                 self.write_bytes(writer, message).await?;
             }
             MainThreadMessage::GetBlock(message) => {
