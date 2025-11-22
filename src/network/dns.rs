@@ -2,7 +2,11 @@ extern crate alloc;
 use bitcoin::Network;
 use std::net::IpAddr;
 
-const SIGNET_SEEDS: &[&str; 2] = &["seed.dlsouza.lol", "seed.signet.bitcoin.sprovoost.nl"];
+const SIGNET_SEEDS: &[&str; 3] = &[
+    "seed.dlsouza.lol",
+    "seed.signet.bitcoin.sprovoost.nl",
+    "seed.signet.achownodes.xyz",
+];
 
 const TESTNET_SEEDS: &[&str; 4] = &[
     "testnet-seed.bitcoin.jonasschnelli.ch",
