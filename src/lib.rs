@@ -110,6 +110,23 @@ impl IndexedBlock {
     }
 }
 
+/// The type of filter to make a request for.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[non_exhaustive]
+pub enum FilterType {
+    #[default]
+    /// A golomb coded compact sketch based on siphash. Contains all spendable script types.
+    Basic,
+}
+
+impl From<FilterType> for u8 {
+    fn from(value: FilterType) -> Self {
+        match value {
+            FilterType::Basic => 0x00,
+        }
+    }
+}
+
 /// A compact block filter with associated height.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexedFilter {
@@ -334,6 +351,7 @@ struct Config {
     chain_state: Option<ChainState>,
     connection_type: ConnectionType,
     peer_timeout_config: PeerTimeoutConfig,
+    filter_type: FilterType,
 }
 
 impl Default for Config {
@@ -345,6 +363,7 @@ impl Default for Config {
             chain_state: Default::default(),
             connection_type: Default::default(),
             peer_timeout_config: PeerTimeoutConfig::default(),
+            filter_type: FilterType::default(),
         }
     }
 }

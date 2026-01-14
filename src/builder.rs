@@ -6,8 +6,8 @@ use bitcoin::Network;
 use super::{client::Client, node::Node};
 use crate::chain::ChainState;
 use crate::network::ConnectionType;
-use crate::Config;
 use crate::TrustedPeer;
+use crate::{Config, FilterType};
 
 const MIN_PEERS: u8 = 1;
 const MAX_PEERS: u8 = 15;
@@ -129,6 +129,12 @@ impl Builder {
         let ip_addr = proxy.into();
         let connection = ConnectionType::Socks5Proxy(ip_addr);
         self.config.connection_type = connection;
+        self
+    }
+
+    /// Request a specific compact sketch type.
+    pub fn filter_type(mut self, filter_type: FilterType) -> Self {
+        self.config.filter_type = filter_type;
         self
     }
 

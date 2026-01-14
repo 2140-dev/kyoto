@@ -14,10 +14,9 @@ use super::{
     CFHeaderBatch, CFHeaderChanges, ChainState, Filter, FilterCheck, FilterHeaderRequest,
     FilterRequest, FilterRequestState, HeaderValidationExt, HeightMonitor, PeerId,
 };
-use crate::IndexedFilter;
 use crate::{chain::BlockHeaderChanges, messages::Event, Dialog, Info, Progress};
+use crate::{FilterType, IndexedFilter};
 
-const FILTER_BASIC: u8 = 0x00;
 const CF_HEADER_BATCH_SIZE: u32 = 1_999;
 const FILTER_BATCH_SIZE: u32 = 999;
 
@@ -28,6 +27,7 @@ pub(crate) struct Chain {
     network: Network,
     heights: Arc<Mutex<HeightMonitor>>,
     dialog: Arc<Dialog>,
+    filter_type: FilterType,
 }
 
 impl Chain {
@@ -37,6 +37,7 @@ impl Chain {
         dialog: Arc<Dialog>,
         height_monitor: Arc<Mutex<HeightMonitor>>,
         quorum_required: u8,
+        filter_type: FilterType,
     ) -> Self {
         let header_chain = match chain_state {
             ChainState::Snapshot(headers) => {
@@ -60,6 +61,7 @@ impl Chain {
             network,
             heights: height_monitor,
             dialog,
+            filter_type,
         }
     }
 
@@ -295,7 +297,7 @@ impl Chain {
             stop_hash,
         });
         GetCFHeaders {
-            filter_type: FILTER_BASIC,
+            filter_type: self.filter_type.into(),
             start_height: last_unchecked_cfheader,
             stop_hash,
         }
@@ -372,7 +374,7 @@ impl Chain {
             start_height: last_unchecked_filter,
         });
         GetCFilters {
-            filter_type: FILTER_BASIC,
+            filter_type: self.filter_type.into(),
             start_height: last_unchecked_filter,
             stop_hash,
         }
@@ -437,6 +439,7 @@ mod tests {
     use tokio::sync::Mutex;
 
     use crate::chain::ChainState;
+    use crate::FilterType;
     use crate::{
         chain::checkpoints::HeaderCheckpoint,
         messages::{Event, Info, Warning},
@@ -459,6 +462,7 @@ mod tests {
             Arc::new(Dialog::new(info_tx, warn_tx, event_tx)),
             height_monitor,
             peers,
+            FilterType::Basic,
         )
     }
 
