@@ -74,6 +74,7 @@ impl Node {
             chain_state,
             connection_type,
             peer_timeout_config,
+            filter_type,
         } = config;
         // Set up a communication channel between the node and client
         let (info_tx, info_rx) = mpsc::channel::<Info>(32);
@@ -107,6 +108,7 @@ impl Node {
             Arc::clone(&dialog),
             height_monitor,
             required_peers,
+            filter_type,
         );
         (
             Self {
