@@ -117,12 +117,15 @@ pub enum FilterType {
     #[default]
     /// A golomb coded compact sketch based on siphash. Contains all spendable script types.
     Basic,
+    /// GCS filter only containing P2TR outputs.
+    Taproot,
 }
 
 impl From<FilterType> for u8 {
     fn from(value: FilterType) -> Self {
         match value {
             FilterType::Basic => 0x00,
+            FilterType::Taproot => 0x01,
         }
     }
 }
