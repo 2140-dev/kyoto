@@ -23,9 +23,12 @@ async fn main() {
         // The number of connections we would like to maintain
         .required_peers(1)
         // Only scan for taproot scripts
-        .chain_state(ChainState::Checkpoint(
-            HeaderCheckpoint::taproot_activation(),
-        ))
+        .chain_state(ChainState::Checkpoint(HeaderCheckpoint {
+            height: 927516,
+            hash: "00000000000000000001849ec8caa64852aa2299002629269ee90424c765c617"
+                .parse()
+                .unwrap(),
+        }))
         .filter_type(FilterType::Taproot)
         // Add some initial peers
         .add_peer(IpAddr::V4(Ipv4Addr::new(65, 109, 109, 117)))
