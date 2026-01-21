@@ -45,11 +45,3 @@ tokio = { version = "1.19", default-features = false, features = [
 [lib]
 name = "bip157"
 path = "src/lib.rs"
-
-[[example]]
-name = "signet"
-path = "example/signet.rs"
-
-[[example]]
-name = "bitcoin"
-path = "example/bitcoin.rs"
