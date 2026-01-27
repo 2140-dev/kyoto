@@ -6,7 +6,7 @@ use tokio::sync::oneshot;
 
 use crate::chain::block_subsidy;
 use crate::messages::ClientRequest;
-use crate::{Event, Info, TrustedPeer, TxBroadcast, Warning};
+use crate::{Event, Info, TrustedPeer, Warning};
 
 use super::{error::ClientError, messages::ClientMessage};
 use super::{error::FetchBlockError, IndexedBlock};
@@ -76,25 +76,9 @@ impl Requester {
     /// # Errors
     ///
     /// If the node has stopped running.
-    pub async fn broadcast_tx(&self, tx_broadcast: TxBroadcast) -> Result<Wtxid, ClientError> {
+    pub async fn broadcast_tx(&self, transaction: Transaction) -> Result<Wtxid, ClientError> {
         let (tx, rx) = tokio::sync::oneshot::channel::<Wtxid>();
-        let client_request = ClientRequest::new(tx_broadcast, tx);
-        self.ntx
-            .send(ClientMessage::Broadcast(client_request))
-            .map_err(|_| ClientError::SendError)?;
-        rx.await.map_err(|_| ClientError::RecvError)
-    }
-
-    /// Broadcast a new transaction to the network to a random peer, waiting for the peer to
-    /// request the data.
-    ///
-    /// # Errors
-    ///
-    /// If the node has stopped running.
-    pub async fn broadcast_random(&self, tx: Transaction) -> Result<Wtxid, ClientError> {
-        let tx_broadcast = TxBroadcast::random_broadcast(tx);
-        let (tx, rx) = tokio::sync::oneshot::channel::<Wtxid>();
-        let client_request = ClientRequest::new(tx_broadcast, tx);
+        let client_request = ClientRequest::new(transaction, tx);
         self.ntx
             .send(ClientMessage::Broadcast(client_request))
             .map_err(|_| ClientError::SendError)?;

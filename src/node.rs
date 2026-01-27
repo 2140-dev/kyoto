@@ -9,7 +9,7 @@ use bitcoin::{
         message_network::VersionMessage,
         ServiceFlags,
     },
-    Block, BlockHash, Network, Wtxid,
+    Block, BlockHash, Network, Transaction, Wtxid,
 };
 use tokio::{
     select,
@@ -37,7 +37,7 @@ use crate::{
         peer_map::PeerMap, LastBlockMonitor, MainThreadMessage, PeerId, PeerMessage,
         PeerThreadMessage,
     },
-    Config, IndexedBlock, NodeState, TxBroadcast, TxBroadcastPolicy,
+    Config, IndexedBlock, NodeState,
 };
 
 use super::{
@@ -288,29 +288,15 @@ impl Node {
     }
 
     // Broadcast transactions according to the configured policy
-    async fn broadcast_transaction(&self, broadcast: ClientRequest<TxBroadcast, Wtxid>) {
+    async fn broadcast_transaction(&self, broadcast: ClientRequest<Transaction, Wtxid>) {
         let mut queue = self.peer_map.tx_queue.lock().await;
-        let (data, oneshot) = broadcast.into_values();
-        let policy = data.broadcast_policy;
-        queue.add_to_queue(data.tx, oneshot);
+        let (transaction, oneshot) = broadcast.into_values();
+        queue.add_to_queue(transaction, oneshot);
         drop(queue);
-        match policy {
-            TxBroadcastPolicy::AllPeers => {
-                crate::debug!(format!(
-                    "Sending transaction to {} connected peers",
-                    self.peer_map.live()
-                ));
-                self.peer_map
-                    .broadcast(MainThreadMessage::BroadcastPending)
-                    .await
-            }
-            TxBroadcastPolicy::RandomPeer => {
-                crate::debug!("Sending transaction to a random peer");
-                self.peer_map
-                    .send_random(MainThreadMessage::BroadcastPending)
-                    .await
-            }
-        };
+        crate::debug!("Sending transaction to a random peer");
+        self.peer_map
+            .send_random(MainThreadMessage::BroadcastPending)
+            .await;
     }
 
     // Try to continue with the syncing process

@@ -623,7 +623,7 @@ async fn tx_can_broadcast() {
         warn_rx: _,
         event_rx: _,
     } = client;
-    tokio::time::timeout(Duration::from_secs(60), requester.broadcast_random(tx))
+    tokio::time::timeout(Duration::from_secs(60), requester.broadcast_tx(tx))
         .await
         .unwrap()
         .unwrap();
