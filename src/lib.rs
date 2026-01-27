@@ -177,43 +177,6 @@ impl std::cmp::Ord for IndexedFilter {
     }
 }
 
-/// Broadcast a [`Transaction`] to a set of connected peers.
-#[derive(Debug, Clone)]
-pub struct TxBroadcast {
-    /// The presumably valid Bitcoin transaction.
-    pub tx: Transaction,
-    /// The strategy for how this transaction should be shared with the network.
-    pub broadcast_policy: TxBroadcastPolicy,
-}
-
-impl TxBroadcast {
-    /// Prepare a transaction for broadcast with associated broadcast strategy.
-    pub fn new(tx: Transaction, broadcast_policy: TxBroadcastPolicy) -> Self {
-        Self {
-            tx,
-            broadcast_policy,
-        }
-    }
-
-    /// Prepare a transaction to be broadcasted to a random connection.
-    pub fn random_broadcast(tx: Transaction) -> Self {
-        Self {
-            tx,
-            broadcast_policy: TxBroadcastPolicy::RandomPeer,
-        }
-    }
-}
-
-/// The strategy for how this transaction should be shared with the network.
-#[derive(Debug, Default, Clone)]
-pub enum TxBroadcastPolicy {
-    /// Broadcast the transaction to all peers at the same time.
-    AllPeers,
-    /// Broadcast the transaction to a single random peer, optimal for user privacy.
-    #[default]
-    RandomPeer,
-}
-
 /// A peer on the Bitcoin P2P network
 ///
 /// # Building peers
