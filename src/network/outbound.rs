@@ -50,7 +50,7 @@ impl MessageGenerator {
     }
 
     pub(in crate::network) fn block(&mut self, hash: BlockHash) -> Vec<u8> {
-        let inv = Inventory::Block(hash);
+        let inv = Inventory::WitnessBlock(hash);
         let msg = NetworkMessage::GetData(vec![inv]);
         self.serialize(msg)
     }
@@ -77,6 +77,35 @@ fn encrypt_plaintext(encryptor: &mut PacketWriter, plaintext: Vec<u8>) -> Vec<u8
     encryptor
         .encrypt_packet(&plaintext, None, PacketType::Genuine)
         .expect("encryption to in memory buffer cannot fail.")
+}
+
+#[cfg(test)]
+mod tests {
+    use bitcoin::{hashes::Hash, BlockHash, Network};
+
+    use super::{MessageGenerator, Transport};
+
+    #[test]
+    fn block_request_uses_witness_inventory() {
+        let mut gen = MessageGenerator {
+            network: Network::Bitcoin,
+            transport: Transport::V1,
+        };
+        let bytes = gen.block(BlockHash::all_zeros());
+        let raw: bitcoin::p2p::message::RawNetworkMessage =
+            bitcoin::consensus::deserialize(&bytes).unwrap();
+        if let bitcoin::p2p::message::NetworkMessage::GetData(inv) = raw.payload() {
+            assert!(
+                matches!(
+                    inv[0],
+                    bitcoin::p2p::message_blockdata::Inventory::WitnessBlock(_)
+                ),
+                "block request must use WitnessBlock to preserve segwit witness data"
+            );
+        } else {
+            panic!("expected GetData message");
+        }
+    }
 }
 
 pub(in crate::network) fn make_version(port: Option<u16>, network: &Network) -> VersionMessage {
