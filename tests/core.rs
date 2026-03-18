@@ -633,6 +633,98 @@ async fn tx_can_broadcast() {
         .unwrap();
 }
 
+// Verify that broadcasting a transaction that the peer already has.
+#[tokio::test]
+async fn tx_broadcast_does_not_hang_when_peer_has_tx() {
+    let amount_to_us = Amount::from_sat(100_000);
+    let amount_to_op_return = Amount::from_sat(50_000);
+    let (bitcoind, socket_addr) = start_bitcoind(true).unwrap();
+    let rpc = &bitcoind.client;
+    let tempdir = tempfile::TempDir::new().unwrap().path().to_owned();
+    let mut rng = StdRng::seed_from_u64(20002);
+    let secret = SecretKey::new(&mut rng);
+    let secp = Secp256k1::new();
+    let keypair = Keypair::from_secret_key(&secp, &secret);
+    let (internal_key, _) = keypair.x_only_public_key();
+    let send_to_this_address = Address::p2tr(&secp, internal_key, None, KnownHrp::Regtest);
+    let miner = rpc.new_address().unwrap();
+    mine_blocks(rpc, &miner, 110, 10).await;
+    let tx_info = rpc
+        .send_to_address(&send_to_this_address, amount_to_us)
+        .unwrap();
+    let txid = tx_info.txid().unwrap();
+    let tx_details = rpc.get_transaction(txid).unwrap().details;
+    let (vout, amt) = tx_details
+        .iter()
+        .find(|detail| detail.address.eq(&send_to_this_address.to_string()))
+        .map(|detail| (detail.vout, detail.amount))
+        .unwrap();
+    let txout = TxOut {
+        script_pubkey: miner.script_pubkey(),
+        value: amount_to_op_return,
+    };
+    let outpoint = OutPoint { txid, vout };
+    let txin = TxIn {
+        previous_output: outpoint,
+        script_sig: ScriptBuf::default(),
+        sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+        witness: Witness::default(),
+    };
+    let mut unsigned_tx = Transaction {
+        version: bitcoin::transaction::Version::TWO,
+        lock_time: absolute::LockTime::ZERO,
+        input: vec![txin],
+        output: vec![txout],
+    };
+    let input_index = 0;
+    let sighash_type = TapSighashType::Default;
+    let prevout = TxOut {
+        script_pubkey: send_to_this_address.script_pubkey(),
+        value: Amount::from_btc(amt.abs()).unwrap(),
+    };
+    let prevouts = vec![prevout];
+    let prevouts = Prevouts::All(&prevouts);
+    let mut sighasher = SighashCache::new(&mut unsigned_tx);
+    let sighash = sighasher
+        .taproot_key_spend_signature_hash(input_index, &prevouts, sighash_type)
+        .unwrap();
+    let tweaked: bitcoin::key::TweakedKeypair = keypair.tap_tweak(&secp, None);
+    let msg = bitcoin::secp256k1::Message::from(sighash);
+    let signature = secp.sign_schnorr(&msg, &tweaked.to_keypair());
+    let signature = bitcoin::taproot::Signature {
+        signature,
+        sighash_type,
+    };
+    *sighasher.witness_mut(input_index).unwrap() = Witness::p2tr_key_spend(&signature);
+    let tx = sighasher.into_transaction().to_owned();
+    // Submit the tx directly to bitcoind via RPC — now the peer already has it.
+    rpc.send_raw_transaction(&tx).unwrap();
+    println!("Submitted tx {} to bitcoind via RPC", tx.compute_txid());
+    // Now broadcast the same tx via kyoto with a zero timeout.
+    let host = (IpAddr::V4(*socket_addr.ip()), Some(socket_addr.port()));
+    let (node, client) = bip157::Builder::new(bitcoin::Network::Regtest)
+        .add_peer(host)
+        .data_dir(tempdir)
+        .chain_state(ChainState::Checkpoint(HeaderCheckpoint::from_genesis(
+            bitcoin::Network::Regtest,
+        )))
+        .broadcast_timeout(Duration::ZERO)
+        .build();
+    tokio::task::spawn(async move { node.run().await });
+    let Client {
+        requester,
+        info_rx: _,
+        warn_rx: _,
+        event_rx: _,
+    } = client;
+    let result = requester.broadcast_tx(tx).await;
+    assert!(
+        matches!(result, Err(bip157::ClientError::BroadcastTimeout)),
+        "expected BroadcastTimeout, got: {:?}",
+        result,
+    );
+}
+
 #[tokio::test]
 async fn dns_works() {
     let hostname = bip157::lookup_host("seed.bitcoin.sipa.be").await;

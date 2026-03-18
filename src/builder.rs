@@ -143,6 +143,15 @@ impl Builder {
         self
     }
 
+    /// Set a timeout for transaction broadcasting. When set, [`Requester::broadcast_tx`] will
+    /// return an error if no peer requests the transaction within the given duration.
+    ///
+    /// If none is provided, `broadcast_tx` will wait indefinitely for a peer to request the transaction.
+    pub fn broadcast_timeout(mut self, timeout: impl Into<Duration>) -> Self {
+        self.config.broadcast_timeout = Some(timeout.into());
+        self
+    }
+
     /// Consume the node builder and receive a [`Node`] and [`Client`].
     pub fn build(mut self) -> (Node, Client) {
         Node::new(self.network, core::mem::take(&mut self.config))

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use bitcoin::p2p::address::AddrV2;
 use bitcoin::p2p::ServiceFlags;
 use bitcoin::{Amount, Transaction, Wtxid};
@@ -32,9 +34,10 @@ impl Client {
         warn_rx: mpsc::UnboundedReceiver<Warning>,
         event_rx: mpsc::UnboundedReceiver<Event>,
         ntx: UnboundedSender<ClientMessage>,
+        broadcast_timeout: Option<Duration>,
     ) -> Self {
         Self {
-            requester: Requester::new(ntx),
+            requester: Requester::new(ntx, broadcast_timeout),
             info_rx,
             warn_rx,
             event_rx,
@@ -46,11 +49,15 @@ impl Client {
 #[derive(Debug, Clone)]
 pub struct Requester {
     ntx: UnboundedSender<ClientMessage>,
+    broadcast_timeout: Option<Duration>,
 }
 
 impl Requester {
-    fn new(ntx: UnboundedSender<ClientMessage>) -> Self {
-        Self { ntx }
+    fn new(ntx: UnboundedSender<ClientMessage>, broadcast_timeout: Option<Duration>) -> Self {
+        Self {
+            ntx,
+            broadcast_timeout,
+        }
     }
 
     /// Tell the node to shut down.
@@ -77,14 +84,22 @@ impl Requester {
     ///
     /// # Errors
     ///
-    /// If the node has stopped running.
+    /// If the node has stopped running or if the configured broadcast timeout expires before
+    /// any peer requests the transaction. A timeout does not necessarily mean the broadcast
+    /// failed — the peer may already have the transaction and simply not sent a `getdata` request.
     pub async fn broadcast_tx(&self, transaction: Transaction) -> Result<Wtxid, ClientError> {
         let (tx, rx) = tokio::sync::oneshot::channel::<Wtxid>();
         let client_request = ClientRequest::new(transaction, tx);
         self.ntx
             .send(ClientMessage::Broadcast(client_request))
             .map_err(|_| ClientError::SendError)?;
-        rx.await.map_err(|_| ClientError::RecvError)
+        match self.broadcast_timeout {
+            Some(timeout) => tokio::time::timeout(timeout, rx)
+                .await
+                .map_err(|_| ClientError::BroadcastTimeout)?
+                .map_err(|_| ClientError::RecvError),
+            None => rx.await.map_err(|_| ClientError::RecvError),
+        }
     }
 
     /// A connection has a minimum transaction fee requirement to enter its mempool. For proper transaction propagation,
