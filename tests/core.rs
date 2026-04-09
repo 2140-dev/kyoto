@@ -634,6 +634,54 @@ async fn tx_can_broadcast() {
 }
 
 #[tokio::test]
+async fn whitelist_only_sync() {
+    let (bitcoind, socket_addr) = start_bitcoind(true).unwrap();
+    let rpc = &bitcoind.client;
+    let tempdir = tempfile::TempDir::new().unwrap().path().to_owned();
+    let miner = rpc.new_address().unwrap();
+    mine_blocks(rpc, &miner, 10, 2).await;
+    let best = best_hash(rpc);
+    let host = (IpAddr::V4(*socket_addr.ip()), Some(socket_addr.port()));
+    let builder = bip157::builder::Builder::new(bitcoin::Network::Regtest)
+        .chain_state(ChainState::Checkpoint(HeaderCheckpoint::from_genesis(
+            bitcoin::Network::Regtest,
+        )))
+        .add_peer(host)
+        .whitelist_only()
+        .data_dir(tempdir);
+    let (node, client) = builder.build();
+    tokio::task::spawn(async move { node.run().await });
+    let Client {
+        requester,
+        info_rx,
+        warn_rx,
+        event_rx: mut channel,
+    } = client;
+    tokio::task::spawn(async move { print_logs(info_rx, warn_rx).await });
+    sync_assert(&best, &mut channel).await;
+    let cp = requester.chain_tip().await.unwrap();
+    assert_eq!(cp.hash, best);
+    requester.shutdown().unwrap();
+    rpc.stop().unwrap();
+}
+
+#[tokio::test]
+async fn whitelist_only_no_peers_exits() {
+    // With whitelist_only and no peers configured, the node should exit
+    // with NoReachablePeers instead of falling back to DNS seeding.
+    let tempdir = tempfile::TempDir::new().unwrap().path().to_owned();
+    let builder = bip157::builder::Builder::new(bitcoin::Network::Regtest)
+        .chain_state(ChainState::Checkpoint(HeaderCheckpoint::from_genesis(
+            bitcoin::Network::Regtest,
+        )))
+        .whitelist_only()
+        .data_dir(tempdir);
+    let (node, _client) = builder.build();
+    let result = node.run().await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
 async fn dns_works() {
     let hostname = bip157::lookup_host("seed.bitcoin.sipa.be").await;
     assert!(!hostname.is_empty());
