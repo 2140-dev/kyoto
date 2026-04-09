@@ -48,6 +48,14 @@ impl Builder {
         self.network
     }
 
+    /// Only connect to peers in the whitelist. When enabled, the node will not discover
+    /// new peers via DNS seeding or addr gossip. If all whitelist peers disconnect,
+    /// the node will exit with [`NodeError::NoReachablePeers`](crate::error::NodeError::NoReachablePeers).
+    pub fn whitelist_only(mut self) -> Self {
+        self.config.whitelist_only = true;
+        self
+    }
+
     /// Add preferred peers to try to connect to.
     pub fn add_peers(mut self, whitelist: impl IntoIterator<Item = TrustedPeer>) -> Self {
         self.config.white_list.extend(whitelist);

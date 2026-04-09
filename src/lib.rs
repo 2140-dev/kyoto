@@ -342,6 +342,7 @@ enum NodeState {
 struct Config {
     required_peers: u8,
     white_list: Vec<TrustedPeer>,
+    whitelist_only: bool,
     data_path: Option<PathBuf>,
     chain_state: Option<ChainState>,
     connection_type: ConnectionType,
@@ -355,6 +356,7 @@ impl Default for Config {
         Self {
             required_peers: 1,
             white_list: Default::default(),
+            whitelist_only: false,
             data_path: Default::default(),
             chain_state: Default::default(),
             connection_type: Default::default(),
