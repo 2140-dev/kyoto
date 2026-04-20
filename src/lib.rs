@@ -64,6 +64,7 @@ use chain::Filter;
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
+use std::time::Duration;
 
 // Re-exports
 #[doc(inline)]
@@ -349,6 +350,7 @@ struct Config {
     peer_timeout_config: PeerTimeoutConfig,
     filter_type: FilterType,
     block_type: BlockType,
+    broadcast_timeout: Option<Duration>,
 }
 
 impl Default for Config {
@@ -363,6 +365,7 @@ impl Default for Config {
             peer_timeout_config: PeerTimeoutConfig::default(),
             filter_type: FilterType::default(),
             block_type: BlockType::default(),
+            broadcast_timeout: None,
         }
     }
 }

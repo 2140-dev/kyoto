@@ -28,6 +28,8 @@ pub enum ClientError {
     SendError,
     /// A channel was dropped before sending its value back.
     RecvError,
+    /// No peer requested the transaction within the configured broadcast timeout.
+    BroadcastTimeout,
 }
 
 impl core::fmt::Display for ClientError {
@@ -38,6 +40,12 @@ impl core::fmt::Display for ClientError {
             }
             ClientError::RecvError => {
                 write!(f, "the sender of data was dropped from memory.")
+            }
+            ClientError::BroadcastTimeout => {
+                write!(
+                    f,
+                    "no peer requested the transaction within the configured timeout."
+                )
             }
         }
     }
