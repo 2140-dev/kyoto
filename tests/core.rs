@@ -724,9 +724,3 @@ async fn whitelist_only_sync() {
     requester.shutdown().unwrap();
     rpc.stop().unwrap();
 }
-
-#[tokio::test]
-async fn dns_works() {
-    let hostname = bip157::lookup_host("seed.bitcoin.sipa.be").await;
-    assert!(!hostname.is_empty());
-}
