@@ -3,7 +3,7 @@
 
 use bip157::builder::Builder;
 use bip157::chain::{BlockHeaderChanges, ChainState};
-use bip157::{lookup_host, Client, Event, HeaderCheckpoint, Network, ScriptBuf};
+use bip157::{Client, Event, HeaderCheckpoint, Network, ScriptBuf};
 use std::collections::HashSet;
 use tokio::time::Instant;
 
@@ -19,7 +19,8 @@ async fn main() {
     let address = ScriptBuf::new_op_return(b"Kyoto light client");
     let mut addresses = HashSet::new();
     addresses.insert(address);
-    let seeds = lookup_host("seed.bitcoin.sipa.be").await;
+    // Query DNS seeds for faster peer discovery
+    // let seeds = lookup_host("seed.bitcoin.sipa.be").await;
     // Create a new node builder
     let builder = Builder::new(NETWORK);
     // Add node preferences and build the node/client
@@ -31,7 +32,7 @@ async fn main() {
             HeaderCheckpoint::taproot_activation(),
         ))
         // Add some initial peers
-        .add_peers(seeds.into_iter().map(From::from))
+        // .add_peers(seeds.into_iter().map(From::from))
         // Connections over Tor are supported by Socks5 proxy
         // .socks5_proxy(bip157::Socks5Proxy::local())
         // Optionally request witness data when fetching a block
