@@ -6,24 +6,24 @@ type Height = u32;
 
 /// A known block hash in the chain of most work.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct HeaderCheckpoint {
+pub struct HashCheckpoint {
     /// The index of the block hash.
     pub height: Height,
     /// The Bitcoin block hash expected at this height
     pub hash: BlockHash,
 }
 
-impl HeaderCheckpoint {
+impl HashCheckpoint {
     /// Create a new checkpoint from a known checkpoint of significant work.
     pub fn new(height: Height, hash: BlockHash) -> Self {
-        HeaderCheckpoint { height, hash }
+        HashCheckpoint { height, hash }
     }
 
     /// Build a checkpoint from the genesis block for a given network.
     pub fn from_genesis(params: impl AsRef<Params>) -> Self {
         let genesis_block = genesis_block(params);
         let hash = genesis_block.block_hash();
-        HeaderCheckpoint { height: 0, hash }
+        HashCheckpoint { height: 0, hash }
     }
 
     /// One block before the activation of the taproot softfork.
@@ -32,7 +32,7 @@ impl HeaderCheckpoint {
             .parse::<BlockHash>()
             .unwrap();
         let height = 709_631;
-        HeaderCheckpoint { height, hash }
+        HashCheckpoint { height, hash }
     }
 
     /// One block before the activation of the segwit softfork.
@@ -41,42 +41,42 @@ impl HeaderCheckpoint {
             .parse::<BlockHash>()
             .unwrap();
         let height = 481_823;
-        HeaderCheckpoint { height, hash }
+        HashCheckpoint { height, hash }
     }
 }
 
-impl std::cmp::PartialOrd for HeaderCheckpoint {
+impl std::cmp::PartialOrd for HashCheckpoint {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl std::cmp::Ord for HeaderCheckpoint {
+impl std::cmp::Ord for HashCheckpoint {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.height.cmp(&other.height)
     }
 }
 
-impl From<(u32, BlockHash)> for HeaderCheckpoint {
+impl From<(u32, BlockHash)> for HashCheckpoint {
     fn from(value: (u32, BlockHash)) -> Self {
-        HeaderCheckpoint::new(value.0, value.1)
+        HashCheckpoint::new(value.0, value.1)
     }
 }
 
-impl TryFrom<(u32, String)> for HeaderCheckpoint {
+impl TryFrom<(u32, String)> for HashCheckpoint {
     type Error = <BlockHash as FromStr>::Err;
 
     fn try_from(value: (u32, String)) -> Result<Self, Self::Error> {
         let hash = BlockHash::from_str(&value.1)?;
-        Ok(HeaderCheckpoint::new(value.0, hash))
+        Ok(HashCheckpoint::new(value.0, hash))
     }
 }
 
-impl TryFrom<(u32, &str)> for HeaderCheckpoint {
+impl TryFrom<(u32, &str)> for HashCheckpoint {
     type Error = <BlockHash as FromStr>::Err;
 
     fn try_from(value: (u32, &str)) -> Result<Self, Self::Error> {
         let hash = BlockHash::from_str(value.1)?;
-        Ok(HeaderCheckpoint::new(value.0, hash))
+        Ok(HashCheckpoint::new(value.0, hash))
     }
 }

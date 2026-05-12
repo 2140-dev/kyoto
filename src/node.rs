@@ -24,7 +24,7 @@ use crate::{
     chain::{
         block_queue::{BlockQueue, ProcessBlockResponse},
         chain::Chain,
-        checkpoints::HeaderCheckpoint,
+        checkpoints::HashCheckpoint,
         CFHeaderChanges, ChainState, FilterCheck, HeaderSyncEffect, IndexedHeader,
     },
     error::FetchBlockError,
@@ -98,7 +98,7 @@ impl Node {
         );
         // Build the chain
         let chain_state = chain_state.unwrap_or(ChainState::Checkpoint(
-            HeaderCheckpoint::from_genesis(network),
+            HashCheckpoint::from_genesis(network),
         ));
         let chain = Chain::new(
             network,
@@ -228,7 +228,7 @@ impl Node {
                                 let block_tree = &self.chain.header_chain;
                                 let hash = block_tree.tip_hash();
                                 let height = block_tree.height();
-                                let checkpoint = HeaderCheckpoint::new(height, hash);
+                                let checkpoint = HashCheckpoint::new(height, hash);
                                 let send_result = oneshot.send(checkpoint);
                                 if send_result.is_err() {
                                     self.dialog.send_warning(Warning::ChannelDropped);
@@ -338,7 +338,7 @@ impl Node {
                 if self.chain.is_filters_synced() {
                     self.state = NodeState::FiltersSynced;
                     let update = SyncUpdate::new(
-                        HeaderCheckpoint::new(
+                        HashCheckpoint::new(
                             self.chain.header_chain.height(),
                             self.chain.header_chain.tip_hash(),
                         ),

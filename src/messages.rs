@@ -6,7 +6,7 @@ use bitcoin::p2p::ServiceFlags;
 use bitcoin::{block::Header, p2p::message_network::RejectReason, BlockHash, FeeRate, Wtxid};
 
 use crate::chain::{BlockHeaderChanges, IndexedHeader};
-use crate::{chain::checkpoints::HeaderCheckpoint, IndexedBlock, TrustedPeer};
+use crate::{chain::checkpoints::HashCheckpoint, IndexedBlock, TrustedPeer};
 use crate::{IndexedFilter, Package};
 
 use super::error::FetchBlockError;
@@ -53,13 +53,13 @@ pub enum Event {
 #[derive(Debug, Clone)]
 pub struct SyncUpdate {
     /// Last known tip of the blockchain
-    pub tip: HeaderCheckpoint,
+    pub tip: HashCheckpoint,
     /// Ten recent headers ending with the tip
     pub recent_history: BTreeMap<u32, Header>,
 }
 
 impl SyncUpdate {
-    pub(crate) fn new(tip: HeaderCheckpoint, recent_history: BTreeMap<u32, Header>) -> Self {
+    pub(crate) fn new(tip: HashCheckpoint, recent_history: BTreeMap<u32, Header>) -> Self {
         Self {
             tip,
             recent_history,
@@ -67,7 +67,7 @@ impl SyncUpdate {
     }
 
     /// Get the tip of the blockchain after this sync.
-    pub fn tip(&self) -> HeaderCheckpoint {
+    pub fn tip(&self) -> HashCheckpoint {
         self.tip
     }
 
@@ -144,7 +144,7 @@ pub(crate) enum ClientMessage {
     /// Explicitly request a block from the node.
     GetBlock(ClientRequest<BlockHash, Result<IndexedBlock, FetchBlockError>>),
     /// Get the chain tip.
-    BestBlock(ClientRequest<(), HeaderCheckpoint>),
+    BestBlock(ClientRequest<(), HashCheckpoint>),
     /// Add another known peer to connect to.
     AddPeer(TrustedPeer),
     /// Request the broadcast minimum fee rate.
