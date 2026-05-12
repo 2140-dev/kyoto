@@ -133,7 +133,7 @@ impl<R: AsyncBufReadExt + Send + Sync + Unpin> Reader<R> {
             }
             NetworkMessage::SendAddrV2 => None,
             #[allow(unused)]
-            NetworkMessage::Unknown { command, payload } => Some(ReaderMessage::Disconnect),
+            NetworkMessage::Unknown { command, payload } => None,
         }
     }
 }
