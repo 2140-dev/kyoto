@@ -68,7 +68,7 @@ use std::path::PathBuf;
 
 // Re-exports
 #[doc(inline)]
-pub use chain::checkpoints::HeaderCheckpoint;
+pub use chain::checkpoints::HashCheckpoint;
 
 #[doc(inline)]
 pub use tokio::sync::mpsc::Receiver;

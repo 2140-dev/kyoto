@@ -3,7 +3,7 @@
 
 use bip157::builder::Builder;
 use bip157::chain::{BlockHeaderChanges, ChainState};
-use bip157::{Client, Event, HeaderCheckpoint, Network, ScriptBuf};
+use bip157::{Client, Event, HashCheckpoint, Network, ScriptBuf};
 use std::collections::HashSet;
 use tokio::time::Instant;
 
@@ -28,9 +28,7 @@ async fn main() {
         // The number of connections we would like to maintain
         .required_peers(2)
         // Only scan for taproot scripts
-        .chain_state(ChainState::Checkpoint(
-            HeaderCheckpoint::taproot_activation(),
-        ))
+        .chain_state(ChainState::Checkpoint(HashCheckpoint::taproot_activation()))
         // Add some initial peers
         // .add_peers(seeds.into_iter().map(From::from))
         // Connections over Tor are supported by Socks5 proxy

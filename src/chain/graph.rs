@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
-use crate::HeaderCheckpoint;
+use crate::HashCheckpoint;
 
 use bitcoin::{
     block::Header, constants::genesis_block, BlockHash, CompactTarget, FilterHash, Network, Work,
@@ -54,8 +54,8 @@ impl Tip {
     }
 }
 
-impl From<HeaderCheckpoint> for Tip {
-    fn from(value: HeaderCheckpoint) -> Self {
+impl From<HashCheckpoint> for Tip {
+    fn from(value: HashCheckpoint) -> Self {
         Tip::from_checkpoint(value.height, value.hash)
     }
 }

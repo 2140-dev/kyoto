@@ -5,7 +5,7 @@ use std::{
 };
 
 use bip157::{
-    chain::{checkpoints::HeaderCheckpoint, BlockHeaderChanges, ChainState},
+    chain::{checkpoints::HashCheckpoint, BlockHeaderChanges, ChainState},
     client::Client,
     node::Node,
     Address, BlockHash, Event, Info, ServiceFlags, Transaction, TrustedPeer, Warning,
@@ -130,7 +130,7 @@ async fn live_reorg() {
     let (node, client) = new_node(
         socket_addr,
         tempdir,
-        ChainState::Checkpoint(HeaderCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -182,7 +182,7 @@ async fn live_reorg_additional_sync() {
     let (node, client) = new_node(
         socket_addr,
         tempdir,
-        ChainState::Checkpoint(HeaderCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -236,7 +236,7 @@ async fn various_client_methods() {
     let (node, client) = new_node(
         socket_addr,
         tempdir,
-        ChainState::Checkpoint(HeaderCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -291,7 +291,7 @@ async fn stop_reorg_resync() {
     let (node, client) = new_node(
         socket_addr,
         tempdir.clone(),
-        ChainState::Checkpoint(HeaderCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -313,7 +313,7 @@ async fn stop_reorg_resync() {
     let (node, client) = new_node(
         socket_addr,
         tempdir.clone(),
-        ChainState::Checkpoint(HeaderCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -351,7 +351,7 @@ async fn stop_reorg_resync() {
     let (node, client) = new_node(
         socket_addr,
         tempdir,
-        ChainState::Checkpoint(HeaderCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -379,7 +379,7 @@ async fn stop_reorg_two_resync() {
     let (node, client) = new_node(
         socket_addr,
         tempdir.clone(),
-        ChainState::Checkpoint(HeaderCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -404,7 +404,7 @@ async fn stop_reorg_two_resync() {
     let (node, client) = new_node(
         socket_addr,
         tempdir.clone(),
-        ChainState::Checkpoint(HeaderCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -441,7 +441,7 @@ async fn stop_reorg_two_resync() {
     let (node, client) = new_node(
         socket_addr,
         tempdir,
-        ChainState::Checkpoint(HeaderCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -468,7 +468,7 @@ async fn stop_reorg_start_on_orphan() {
     let (node, client) = new_node(
         socket_addr,
         tempdir.clone(),
-        ChainState::Checkpoint(HeaderCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -491,7 +491,7 @@ async fn stop_reorg_start_on_orphan() {
     let (node, client) = new_node(
         socket_addr,
         tempdir.clone(),
-        ChainState::Checkpoint(HeaderCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -640,7 +640,7 @@ async fn tx_can_broadcast() {
     let (node, client) = new_node(
         socket_addr,
         tempdir.clone(),
-        ChainState::Checkpoint(HeaderCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -665,7 +665,7 @@ async fn whitelist_only_sync() {
     let best = best_hash(rpc);
     let host = (IpAddr::V4(*socket_addr.ip()), Some(socket_addr.port()));
     let builder = bip157::builder::Builder::new(bitcoin::Network::Regtest)
-        .chain_state(ChainState::Checkpoint(HeaderCheckpoint::from_genesis(
+        .chain_state(ChainState::Checkpoint(HashCheckpoint::from_genesis(
             bitcoin::Network::Regtest,
         )))
         .add_peer(host)
@@ -687,7 +687,7 @@ async fn whitelist_only_sync() {
     rpc.stop().unwrap();
     // No peer available, white list only.
     let builder = bip157::builder::Builder::new(bitcoin::Network::Regtest)
-        .chain_state(ChainState::Checkpoint(HeaderCheckpoint::from_genesis(
+        .chain_state(ChainState::Checkpoint(HashCheckpoint::from_genesis(
             bitcoin::Network::Regtest,
         )))
         .whitelist_only()
@@ -703,7 +703,7 @@ async fn whitelist_only_sync() {
     let best = best_hash(rpc);
     let peer = TrustedPeer::from_hostname(socket_addr.ip().to_string(), socket_addr.port());
     let builder = bip157::builder::Builder::new(bitcoin::Network::Regtest)
-        .chain_state(ChainState::Checkpoint(HeaderCheckpoint::from_genesis(
+        .chain_state(ChainState::Checkpoint(HashCheckpoint::from_genesis(
             bitcoin::Network::Regtest,
         )))
         .add_peer(peer)

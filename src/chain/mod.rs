@@ -22,7 +22,7 @@ use bitcoin::{
 };
 
 use crate::network::PeerId;
-use crate::HeaderCheckpoint;
+use crate::HashCheckpoint;
 
 const MAX_PREV_STOP_HASHES: usize = 3;
 
@@ -96,7 +96,7 @@ pub enum ChainState {
     /// A single checkpoint to start the sync _strictly after_.
     ///
     /// Note that no reorganizations can be reported.
-    Checkpoint(HeaderCheckpoint),
+    Checkpoint(HashCheckpoint),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -9,7 +9,7 @@ use tokio::sync::oneshot;
 use crate::chain::block_subsidy;
 use crate::chain::IndexedHeader;
 use crate::messages::ClientRequest;
-use crate::{Event, HeaderCheckpoint, Info, Package, TrustedPeer, Warning};
+use crate::{Event, HashCheckpoint, Info, Package, TrustedPeer, Warning};
 
 use super::{error::ClientError, messages::ClientMessage};
 use super::{error::FetchBlockError, IndexedBlock};
@@ -223,8 +223,8 @@ impl Requester {
     /// # Errors
     ///
     /// If the node has stopped running.
-    pub async fn chain_tip(&self) -> Result<HeaderCheckpoint, ClientError> {
-        let (tx, rx) = tokio::sync::oneshot::channel::<HeaderCheckpoint>();
+    pub async fn chain_tip(&self) -> Result<HashCheckpoint, ClientError> {
+        let (tx, rx) = tokio::sync::oneshot::channel::<HashCheckpoint>();
         let request = ClientRequest::new((), tx);
         self.ntx
             .send(ClientMessage::BestBlock(request))
