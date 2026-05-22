@@ -272,6 +272,22 @@ impl Node {
                                     self.dialog.send_warning(Warning::ChannelDropped);
                                 };
                             }
+                            ClientMessage::GetHeaderByHash(request) => {
+                                let (hash, oneshot) = request.into_values();
+                                let indexed = self
+                                    .chain
+                                    .header_chain
+                                    .header_at_hash(hash)
+                                    .and_then(|header| {
+                                        self.chain
+                                            .header_chain
+                                            .height_of_hash(hash)
+                                            .map(|height| IndexedHeader::new(height, header))
+                                    });
+                                if oneshot.send(indexed).is_err() {
+                                    self.dialog.send_warning(Warning::ChannelDropped);
+                                };
+                            }
                             ClientMessage::NoOp => (),
                         }
                     }

@@ -247,6 +247,30 @@ impl Requester {
         rx.await.map_err(|_| ClientError::RecvError)
     }
 
+    /// Look up a header by block hash in the locally synced header chain. Unlike
+    /// [`Self::get_header`], this method returns the header even when the block
+    /// has been demoted from the chain of most work by a reorg, so callers that
+    /// receive a [`BlockHash`] from an [`Event`](crate::Event) (e.g. an
+    /// [`IndexedFilter`](crate::IndexedFilter)) can always resolve the exact
+    /// header the event referred to.
+    ///
+    /// Returns `None` if the hash is not known to the local header chain.
+    ///
+    /// # Errors
+    ///
+    /// If the node has stopped running.
+    pub async fn get_header_by_hash(
+        &self,
+        hash: BlockHash,
+    ) -> Result<Option<IndexedHeader>, ClientError> {
+        let (tx, rx) = tokio::sync::oneshot::channel::<Option<IndexedHeader>>();
+        let request = ClientRequest::new(hash, tx);
+        self.ntx
+            .send(ClientMessage::GetHeaderByHash(request))
+            .map_err(|_| ClientError::SendError)?;
+        rx.await.map_err(|_| ClientError::RecvError)
+    }
+
     /// Look up the height of a block hash in the locally synced chain of most work.
     /// Returns `None` if the hash is not in the chain of most work.
     ///
