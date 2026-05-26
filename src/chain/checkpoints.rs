@@ -27,6 +27,10 @@ impl HashCheckpoint {
     }
 
     /// One block before the activation of the taproot softfork.
+    ///
+    /// # Note
+    ///
+    /// This checkpoint is only available on the Bitcoin network (`main`, "mainnet").
     pub fn taproot_activation() -> Self {
         let hash = "000000000000000000013712fc242ee6dd28476d0e9c931c75f83e6974c6bccc"
             .parse::<BlockHash>()
@@ -36,6 +40,10 @@ impl HashCheckpoint {
     }
 
     /// One block before the activation of the segwit softfork.
+    ///
+    /// # Note
+    ///
+    /// This checkpoint is only available on the Bitcoin network (`main`, "mainnet").
     pub fn segwit_activation() -> Self {
         let hash = "000000000000000000cbeff0b533f8e1189cf09dfbebf57a8ebe349362811b80"
             .parse::<BlockHash>()
