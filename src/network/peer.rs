@@ -259,6 +259,15 @@ impl Peer {
                     .await?;
                 Ok(())
             }
+            ReaderMessage::NewBlocks(block_hashes) => {
+                self.main_thread_sender
+                    .send(PeerThreadMessage {
+                        nonce: self.nonce,
+                        message: PeerMessage::NewBlocks(block_hashes),
+                    })
+                    .await?;
+                Ok(())
+            }
             ReaderMessage::GetData(requests) => {
                 let mut tx_queue = self.tx_queue.lock().await;
                 for inv in requests {

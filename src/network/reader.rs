@@ -9,7 +9,7 @@ use bitcoin::{
         message_network::VersionMessage,
         ServiceFlags,
     },
-    Block,
+    Block, BlockHash,
 };
 use bitcoin::{FeeRate, Wtxid};
 use tokio::io::AsyncBufReadExt;
@@ -59,7 +59,19 @@ impl<R: AsyncBufReadExt + Send + Sync + Unpin> Reader<R> {
                 if inventory.len() > MAX_INV {
                     return Some(ReaderMessage::Disconnect);
                 }
-                None
+                let blocks: Vec<BlockHash> = inventory
+                    .into_iter()
+                    .filter_map(|inv| match inv {
+                        Inventory::Block(hash)
+                        | Inventory::CompactBlock(hash)
+                        | Inventory::WitnessBlock(hash) => Some(hash),
+                        _ => None,
+                    })
+                    .collect();
+                if blocks.is_empty() {
+                    return None;
+                }
+                Some(ReaderMessage::NewBlocks(blocks))
             }
             NetworkMessage::GetData(inventory) => Some(ReaderMessage::GetData(inventory)),
             NetworkMessage::NotFound(_) => None,
@@ -146,6 +158,7 @@ pub(in crate::network) enum ReaderMessage {
     FilterHeaders(CFHeaders),
     Filter(CFilter),
     Block(Block),
+    NewBlocks(Vec<BlockHash>),
     Reject(RejectPayload),
     Disconnect,
     Verack,
@@ -169,5 +182,42 @@ impl ReaderMessage {
             }
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_reader() -> Reader<tokio::io::Empty> {
+        let (tx, _rx) = tokio::sync::mpsc::channel(1);
+        Reader::new(
+            MessageParser::V1(tokio::io::empty(), bitcoin::Network::Regtest),
+            tx,
+        )
+    }
+
+    #[test]
+    fn inv_parsing_surfaces_only_block_hashes() {
+        let reader = test_reader();
+        let block = BlockHash::from_byte_array([1; 32]);
+        let witness_block = BlockHash::from_byte_array([2; 32]);
+        let txid = bitcoin::Txid::from_byte_array([3; 32]);
+        // Mixed inventory: only block hashes surface, in order.
+        let parsed = reader.parse_message(NetworkMessage::Inv(vec![
+            Inventory::Transaction(txid),
+            Inventory::Block(block),
+            Inventory::WitnessBlock(witness_block),
+        ]));
+        assert!(
+            matches!(parsed, Some(ReaderMessage::NewBlocks(hashes)) if hashes == vec![block, witness_block])
+        );
+        // Transaction-only inventory remains ignored.
+        let parsed = reader.parse_message(NetworkMessage::Inv(vec![Inventory::Transaction(txid)]));
+        assert!(parsed.is_none());
+        // Oversized inventory still disconnects.
+        let oversized = vec![Inventory::Block(block); MAX_INV + 1];
+        let parsed = reader.parse_message(NetworkMessage::Inv(oversized));
+        assert!(matches!(parsed, Some(ReaderMessage::Disconnect)));
     }
 }
