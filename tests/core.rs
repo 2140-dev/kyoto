@@ -724,3 +724,37 @@ async fn whitelist_only_sync() {
     requester.shutdown().unwrap();
     rpc.stop().unwrap();
 }
+
+#[tokio::test]
+async fn inv_fallback_after_burst_mine() {
+    let (bitcoind, socket_addr) = start_bitcoind(true).unwrap();
+    let rpc = &bitcoind.client;
+    let tempdir = tempfile::TempDir::new().unwrap().path().to_owned();
+    let miner = rpc.new_address().unwrap();
+    mine_blocks(rpc, &miner, 10, 2).await;
+    let best = best_hash(rpc);
+    let (node, client) = new_node(
+        socket_addr,
+        tempdir,
+        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+    );
+    tokio::task::spawn(async move { node.run().await });
+    let Client {
+        requester,
+        info_rx,
+        warn_rx,
+        event_rx: mut channel,
+    } = client;
+    tokio::task::spawn(async move { print_logs(info_rx, warn_rx).await });
+    sync_assert(&best, &mut channel).await;
+    invalidate_block(rpc, &best).await;
+    let stale = best_hash(rpc);
+    invalidate_block(rpc, &stale).await;
+    mine_blocks(rpc, &miner, 9, 1).await;
+    let best = best_hash(rpc);
+    tokio::time::timeout(Duration::from_secs(120), sync_assert(&best, &mut channel))
+        .await
+        .expect("node did not learn the new tip after a block burst");
+    requester.shutdown().unwrap();
+    rpc.stop().unwrap();
+}

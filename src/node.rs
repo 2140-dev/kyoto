@@ -188,6 +188,15 @@ impl Node {
                                     }
                                     None => continue,
                                 },
+                                PeerMessage::NewBlocks(blocks) => {
+                                    crate::debug!(format!("[{}]: inv", peer_thread.nonce));
+                                    match self.handle_inventory_blocks(blocks) {
+                                        Some(response) => {
+                                            self.peer_map.send_message(peer_thread.nonce, response).await;
+                                        }
+                                        None => continue,
+                                    }
+                                }
                                 PeerMessage::FeeFilter(feerate) => {
                                     self.peer_map.set_broadcast_min(peer_thread.nonce, feerate);
                                 }
@@ -597,6 +606,32 @@ impl Node {
             return next_block_hash.map(MainThreadMessage::GetBlock);
         }
         None
+    }
+
+    // A peer announced new blocks with an `inv` instead of `headers`. Bitcoin Core
+    // falls back to inv-of-tip, even after BIP-130 `sendheaders`, when more than
+    // eight blocks connect in a single announcement round or when a block queued
+    // for announcement was reorganized away. Probe the announcing peer with
+    // `getheaders` and let the response drive any state changes through the usual
+    // `handle_headers` path. Deliberately no `NodeState` mutation, no filter queue
+    // changes, no tip assumption, and no `LastBlockMonitor` reset on the inv itself.
+    fn handle_inventory_blocks(&mut self, blocks: Vec<BlockHash>) -> Option<MainThreadMessage> {
+        // A header sync is already in progress.
+        if self.state == NodeState::Behind {
+            return None;
+        }
+        if blocks
+            .into_iter()
+            .all(|block| self.chain.header_chain.contains(block))
+        {
+            return None;
+        }
+        let next_headers = GetHeadersMessage {
+            version: WTXID_VERSION,
+            locator_hashes: self.chain.header_chain.locators(),
+            stop_hash: BlockHash::all_zeros(),
+        };
+        Some(MainThreadMessage::GetHeaders(next_headers))
     }
 
     // Clear the filter hash cache and redownload the filters.
