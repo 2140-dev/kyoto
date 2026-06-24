@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Fixed
 
 - Block announcements via `inv` trigger a `getheaders` request instead of being ignored
+- Whitelist-only nodes retry their configured peers, re-resolving hostnames, instead of exiting with `NoReachablePeers`
 
 ## 0.6.0
 

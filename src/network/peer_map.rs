@@ -106,6 +106,11 @@ impl PeerMap {
         self.whitelist.push(peer);
     }
 
+    // In whitelist-only mode a non-empty whitelist is retried rather than ending the node.
+    pub fn will_retry_whitelist(&self) -> bool {
+        self.whitelist_only && !self.whitelist.is_empty()
+    }
+
     // Send out a TCP connection to a new peer and begin tracking the task
     pub async fn dispatch(&mut self, loaded_peer: Record) -> Result<(), PeerError> {
         let (ptx, prx) = mpsc::channel::<MainThreadMessage>(32);
@@ -215,8 +220,11 @@ impl PeerMap {
 
     // Pull a peer from the configuration if we have one. If not, select a random peer from the database,
     // as long as it is not from the same netgroup. If there are no peers in the database, try DNS.
-    // When `whitelist_only` is set, only whitelist peers are used.
+    // When `whitelist_only` is set, the configured peers are retried instead (see `next_whitelist_peer`).
     pub async fn next_peer(&mut self) -> Option<Record> {
+        if self.whitelist_only {
+            return self.next_whitelist_peer().await;
+        }
         while let Some(peer) = self.whitelist.pop() {
             let port = peer
                 .port
@@ -224,49 +232,26 @@ impl PeerMap {
             let addr = match peer.address {
                 TrustedPeerInner::Addr(addr) => addr,
                 TrustedPeerInner::Hostname(host) => {
-                    crate::debug!(format!("Resolving hostname {host}:{port}"));
-                    match tokio::net::lookup_host((host.as_str(), port)).await {
-                        Ok(iter) => {
-                            let resolved: Vec<AddrV2> = iter
-                                .map(|sa| match sa.ip() {
-                                    IpAddr::V4(ip) => AddrV2::Ipv4(ip),
-                                    IpAddr::V6(ip) => AddrV2::Ipv6(ip),
-                                })
-                                .collect();
-                            if resolved.is_empty() {
-                                crate::debug!(format!(
-                                    "Hostname {host} resolved to no addresses, skipping"
-                                ));
-                                continue;
-                            }
-                            crate::debug!(format!(
-                                "Resolved {host} to {} address(es)",
-                                resolved.len()
-                            ));
-                            // Push every resolved address onto the whitelist so each is tried on
-                            // a subsequent call. Reversed so the resolver's preferred order is
-                            // preserved under LIFO pop.
-                            for resolved_addr in resolved.into_iter().rev() {
-                                self.whitelist.push(TrustedPeer {
-                                    address: TrustedPeerInner::Addr(resolved_addr),
-                                    port: Some(port),
-                                    known_services: peer.known_services,
-                                });
-                            }
-                            continue;
-                        }
-                        Err(_) => {
-                            crate::debug!(format!("Failed to resolve hostname {host}"));
-                            continue;
-                        }
+                    let resolved = Self::resolve_hostname(&host, port).await;
+                    if resolved.is_empty() {
+                        continue;
                     }
+                    crate::debug!(format!("Resolved {host} to {} address(es)", resolved.len()));
+                    // Push every resolved address onto the whitelist so each is tried on
+                    // a subsequent call. Reversed so the resolver's preferred order is
+                    // preserved under LIFO pop.
+                    for resolved_addr in resolved.into_iter().rev() {
+                        self.whitelist.push(TrustedPeer {
+                            address: TrustedPeerInner::Addr(resolved_addr),
+                            port: Some(port),
+                            known_services: peer.known_services,
+                        });
+                    }
+                    continue;
                 }
             };
             crate::debug!("Using a configured peer");
             return Some(Record::new(addr, port, peer.known_services, &LOCAL_HOST));
-        }
-        if self.whitelist_only {
-            return None;
         }
         let mut db_lock = self.db.lock().await;
         if db_lock.is_empty() {
@@ -294,6 +279,52 @@ impl PeerMap {
         db_lock.select()
     }
 
+    // Rotate through the configured peers instead of draining them, re-resolving hostnames
+    // each pass so reconnections follow DNS changes. `None` means none currently resolve.
+    async fn next_whitelist_peer(&mut self) -> Option<Record> {
+        for _ in 0..self.whitelist.len() {
+            // Rotate so the next call tries the following peer.
+            let peer = self.whitelist.remove(0);
+            self.whitelist.push(peer.clone());
+            let port = peer
+                .port
+                .unwrap_or(default_port_from_network(&self.network));
+            let addr = match peer.address {
+                TrustedPeerInner::Addr(addr) => addr,
+                // Pick one at random so reconnections spread across a hostname's addresses.
+                TrustedPeerInner::Hostname(host) => match Self::resolve_hostname(&host, port)
+                    .await
+                    .into_iter()
+                    .choose(&mut StdRng::from_entropy())
+                {
+                    Some(addr) => addr,
+                    None => continue,
+                },
+            };
+            crate::debug!("Using a configured peer");
+            return Some(Record::new(addr, port, peer.known_services, &LOCAL_HOST));
+        }
+        None
+    }
+
+    // Resolve a hostname to its current set of P2P addresses, or an empty vec on failure.
+    async fn resolve_hostname(host: &str, port: u16) -> Vec<AddrV2> {
+        crate::debug!(format!("Resolving hostname {host}:{port}"));
+        let resolved: Vec<AddrV2> = match tokio::net::lookup_host((host, port)).await {
+            Ok(iter) => iter
+                .map(|sa| match sa.ip() {
+                    IpAddr::V4(ip) => AddrV2::Ipv4(ip),
+                    IpAddr::V6(ip) => AddrV2::Ipv6(ip),
+                })
+                .collect(),
+            Err(_) => Vec::new(),
+        };
+        if resolved.is_empty() {
+            crate::debug!(format!("Could not resolve {host} to any address"));
+        }
+        resolved
+    }
+
     // We tried this peer and successfully connected.
     pub async fn tried(&mut self, nonce: PeerId) {
         if let Some(peer) = self.map.get(&nonce) {
@@ -308,5 +339,72 @@ impl PeerMap {
             let mut db = self.db.lock().await;
             db.ban(&peer.record);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_peer_map(whitelist: Whitelist, whitelist_only: bool) -> PeerMap {
+        let (mtx, _mrx) = mpsc::channel(8);
+        let (info_tx, _info_rx) = mpsc::channel(8);
+        let (warn_tx, _warn_rx) = mpsc::unbounded_channel();
+        let (event_tx, _event_rx) = mpsc::unbounded_channel();
+        PeerMap::new(
+            mtx,
+            Network::Regtest,
+            BlockType::default(),
+            whitelist,
+            whitelist_only,
+            Arc::new(Dialog::new(info_tx, warn_tx, event_tx)),
+            ConnectionType::default(),
+            PeerTimeoutConfig::default(),
+        )
+    }
+
+    fn two_local_peers() -> Whitelist {
+        vec![
+            TrustedPeer::from_ip(Ipv4Addr::new(127, 0, 0, 1)),
+            TrustedPeer::from_ip(Ipv4Addr::new(127, 0, 0, 2)),
+        ]
+    }
+
+    #[tokio::test]
+    async fn whitelist_only_retries_without_draining() {
+        let mut peer_map = test_peer_map(two_local_peers(), true);
+        // Rotated, never consumed: a peer is always available however many times we dial.
+        for _ in 0..6 {
+            assert!(peer_map.next_peer().await.is_some());
+        }
+        assert!(peer_map.will_retry_whitelist());
+    }
+
+    #[tokio::test]
+    async fn gossip_mode_consumes_the_whitelist() {
+        let mut peer_map = test_peer_map(two_local_peers(), false);
+        assert!(peer_map.next_peer().await.is_some());
+        assert!(peer_map.next_peer().await.is_some());
+        // Consumed once in gossip mode; regtest has no DNS seeds or stored peers to fall back on.
+        assert!(peer_map.next_peer().await.is_none());
+        assert!(!peer_map.will_retry_whitelist());
+    }
+
+    #[tokio::test]
+    async fn empty_whitelist_is_fatal_in_whitelist_only() {
+        let mut peer_map = test_peer_map(Vec::new(), true);
+        assert!(!peer_map.will_retry_whitelist());
+        assert!(peer_map.next_peer().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn runtime_peers_join_the_retry_cycle() {
+        let mut peer_map = test_peer_map(Vec::new(), true);
+        assert!(!peer_map.will_retry_whitelist());
+        peer_map.add_trusted_peer(TrustedPeer::from_ip(Ipv4Addr::new(127, 0, 0, 1)));
+        assert!(peer_map.will_retry_whitelist());
+        // The added peer is retried like any other configured peer.
+        assert!(peer_map.next_peer().await.is_some());
+        assert!(peer_map.next_peer().await.is_some());
     }
 }

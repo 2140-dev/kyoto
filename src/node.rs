@@ -297,17 +297,22 @@ impl Node {
         let required = self.next_required_peers();
         // Find more peers when lower than the desired threshold.
         if live < required {
-            self.dialog.send_warning(Warning::NeedConnections {
-                connected: live,
-                required,
-            });
-            let address = self
-                .peer_map
-                .next_peer()
-                .await
-                .ok_or(NodeError::NoReachablePeers)?;
-            if self.peer_map.dispatch(address).await.is_err() {
-                self.dialog.send_warning(Warning::CouldNotConnect);
+            match self.peer_map.next_peer().await {
+                Some(address) => {
+                    self.dialog.send_warning(Warning::NeedConnections {
+                        connected: live,
+                        required,
+                    });
+                    if self.peer_map.dispatch(address).await.is_err() {
+                        self.dialog.send_warning(Warning::CouldNotConnect);
+                    }
+                }
+                // Whitelist-only mode retries on the next loop iteration; gossip mode is out of peers.
+                None => {
+                    if !self.peer_map.will_retry_whitelist() {
+                        return Err(NodeError::NoReachablePeers);
+                    }
+                }
             }
         }
         Ok(())

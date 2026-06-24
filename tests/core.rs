@@ -758,3 +758,57 @@ async fn inv_fallback_after_burst_mine() {
     requester.shutdown().unwrap();
     rpc.stop().unwrap();
 }
+
+#[tokio::test]
+async fn whitelist_only_reconnects() {
+    let (bitcoind, socket_addr) = start_bitcoind(true).unwrap();
+    let rpc = &bitcoind.client;
+    let tempdir = tempfile::TempDir::new().unwrap().path().to_owned();
+    let miner = rpc.new_address().unwrap();
+    mine_blocks(rpc, &miner, 10, 2).await;
+    let best = best_hash(rpc);
+    let host = (IpAddr::V4(*socket_addr.ip()), Some(socket_addr.port()));
+    let builder = bip157::builder::Builder::new(bitcoin::Network::Regtest)
+        .chain_state(ChainState::Checkpoint(HashCheckpoint::from_genesis(
+            bitcoin::Network::Regtest,
+        )))
+        .add_peer(host)
+        .whitelist_only()
+        // Force the connection rotation often, so the node must redial the whitelist
+        // peer while the test is running.
+        .maximum_connection_time(Duration::from_secs(2))
+        .data_dir(&tempdir);
+    let (node, client) = builder.build();
+    tokio::task::spawn(async move { node.run().await });
+    let Client {
+        requester,
+        info_rx,
+        warn_rx,
+        event_rx: mut channel,
+    } = client;
+    tokio::task::spawn(async move { print_logs(info_rx, warn_rx).await });
+    sync_assert(&best, &mut channel).await;
+    // Each round outlives a rotation, so the node must redial the whitelist
+    // peer to keep following the chain.
+    for _ in 0..3 {
+        mine_blocks(rpc, &miner, 1, 2).await;
+        let best = best_hash(rpc);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+        loop {
+            let tip = requester
+                .chain_tip()
+                .await
+                .expect("node exited instead of retrying the whitelist");
+            if tip.hash == best {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "node did not sync to the new tip after a rotation"
+            );
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+    }
+    requester.shutdown().unwrap();
+    rpc.stop().unwrap();
+}
