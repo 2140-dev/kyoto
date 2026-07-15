@@ -13,7 +13,7 @@ rust-version = "1.84.0"
 
 [dependencies]
 addrman = { package = "bitcoin-address-book", version = "0.1.1" }
-bitcoin = { version = "0.32.102", default-features = false, features = [
+bitcoin = { version = "0.32.8", default-features = false, features = [
     "rand-std",
 ] }
 bip324 = { version = "0.7.0", default-features = false, features = [
