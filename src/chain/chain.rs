@@ -335,7 +335,11 @@ impl Chain {
             .header_chain
             .height_of_hash(filter_message.block_hash)
             .ok_or(CFilterSyncError::UnknownFilterHash)?;
-        let indexed_filter = IndexedFilter::new(height, filter);
+        let header = self
+            .header_chain
+            .header_at_hash(filter_message.block_hash)
+            .ok_or(CFilterSyncError::UnknownFilterHash)?;
+        let indexed_filter = IndexedFilter::new(height, header, filter);
         self.dialog.send_event(Event::IndexedFilter(indexed_filter));
         self.header_chain.check_filter(filter_message.block_hash);
         let stop_hash = self

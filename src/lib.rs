@@ -139,12 +139,17 @@ impl From<FilterType> for u8 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexedFilter {
     height: u32,
+    header: Header,
     filter: Filter,
 }
 
 impl IndexedFilter {
-    fn new(height: u32, filter: Filter) -> Self {
-        Self { height, filter }
+    fn new(height: u32, header: Header, filter: Filter) -> Self {
+        Self {
+            height,
+            header,
+            filter,
+        }
     }
 
     /// The height in the chain.
@@ -157,6 +162,11 @@ impl IndexedFilter {
         self.filter.block_hash()
     }
 
+    /// Return the underlying block [`Header`] corresponding to this filter.
+    pub fn header(&self) -> Header {
+        self.header
+    }
+
     /// Does the filter contain a positive match for any of the provided scripts
     pub fn contains_any<'a>(&'a self, scripts: impl Iterator<Item = &'a ScriptBuf>) -> bool {
         self.filter.contains_any(scripts)
@@ -165,6 +175,11 @@ impl IndexedFilter {
     /// Consume the index and get underlying block filter.
     pub fn block_filter(self) -> BlockFilter {
         self.filter.into_filter()
+    }
+
+    /// Consume the index and get the underlying parts.
+    pub fn into_parts(self) -> (Header, BlockFilter) {
+        (self.header, self.filter.into_filter())
     }
 
     /// Consume the filter and get the raw bytes
