@@ -441,7 +441,7 @@ impl Node {
         }
         // Inform the user we are connected to all required peers
         if self.peer_map.live().eq(&self.required_peers) {
-            self.dialog.send_info(Info::ConnectionsMet).await;
+            self.dialog.send_info(Info::ConnectionsMet);
         }
         // Even if we start the node as caught up in terms of height, we need to check for reorgs. So we can send this unconditionally.
         let next_headers = GetHeadersMessage {
@@ -465,7 +465,7 @@ impl Node {
                     if self.state != NodeState::Behind {
                         self.state = NodeState::Behind;
                     }
-                    self.chain.send_chain_update().await;
+                    self.chain.send_chain_update();
                 }
                 HeaderSyncEffect::Empty => {
                     if self.state == NodeState::Behind {
@@ -476,7 +476,7 @@ impl Node {
                     if self.state != NodeState::HeadersSynced {
                         self.state = NodeState::HeadersSynced;
                     }
-                    self.chain.send_chain_update().await;
+                    self.chain.send_chain_update();
                     self.block_queue.remove(&reorgs);
                 }
             },
@@ -497,7 +497,7 @@ impl Node {
         peer_id: PeerId,
         cf_headers: CFHeaders,
     ) -> Option<MainThreadMessage> {
-        self.chain.send_chain_update().await;
+        self.chain.send_chain_update();
         match self.chain.sync_cf_headers(peer_id, cf_headers) {
             Ok(potential_message) => match potential_message {
                 CFHeaderChanges::AddedToQueue => None,
@@ -529,7 +529,7 @@ impl Node {
             Ok(potential_message) => {
                 let FilterCheck { was_last_in_batch } = potential_message;
                 if was_last_in_batch {
-                    self.chain.send_chain_update().await;
+                    self.chain.send_chain_update();
                     if !self.chain.is_filters_synced() {
                         let next_filters = self.chain.next_filter_message();
                         return Some(MainThreadMessage::GetFilters(next_filters));
@@ -571,8 +571,7 @@ impl Node {
         match process_block_response {
             ProcessBlockResponse::Accepted { block_recipient } => {
                 self.dialog
-                    .send_info(Info::BlockReceived(block.block_hash()))
-                    .await;
+                    .send_info(Info::BlockReceived(block.block_hash()));
                 let send_err = block_recipient
                     .send(Ok(IndexedBlock::new(height, block)))
                     .is_err();

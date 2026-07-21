@@ -456,8 +456,8 @@ impl Dialog {
         let _ = self.warn_tx.send(warning);
     }
 
-    async fn send_info(&self, info: Info) {
-        let _ = self.info_tx.send(info).await;
+    fn send_info(&self, info: Info) {
+        let _ = self.info_tx.try_send(info);
     }
 
     fn send_event(&self, message: Event) {

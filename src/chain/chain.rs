@@ -396,15 +396,13 @@ impl Chain {
         self.header_chain.reset_all_filters();
     }
 
-    pub(crate) async fn send_chain_update(&self) {
-        self.dialog
-            .send_info(Info::Progress(Progress::new(
-                self.header_chain.total_filter_headers_synced(),
-                self.header_chain.total_filters_synced(),
-                self.header_chain.internal_chain_len() as u32,
-                self.header_chain.height(),
-            )))
-            .await;
+    pub(crate) fn send_chain_update(&self) {
+        self.dialog.send_info(Info::Progress(Progress::new(
+            self.header_chain.total_filter_headers_synced(),
+            self.header_chain.total_filters_synced(),
+            self.header_chain.internal_chain_len() as u32,
+            self.header_chain.height(),
+        )));
         crate::debug!(format!(
             "Headers: {} CFHeaders: ({}/{}) CFilters: ({}/{})",
             self.header_chain.height(),

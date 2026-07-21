@@ -316,7 +316,7 @@ impl Peer {
                 }
                 self.message_state.verack.got_ack();
                 if self.message_state.verack.both_acks() {
-                    self.dialog.send_info(Info::SuccessfulHandshake).await;
+                    self.dialog.send_info(Info::SuccessfulHandshake);
                     self.message_state.finish_version_handshake();
                 }
                 Ok(())
@@ -423,7 +423,7 @@ impl Peer {
                 self.write_bytes(writer, message).await?;
                 self.message_state.verack.sent_ack();
                 if self.message_state.verack.both_acks() {
-                    self.dialog.send_info(Info::SuccessfulHandshake).await;
+                    self.dialog.send_info(Info::SuccessfulHandshake);
                     self.message_state.finish_version_handshake();
                 }
                 // Take any pending announcements and share them now that the handshake is over
