@@ -213,6 +213,8 @@ impl Chain {
         match self.request_state.pending_batch.take() {
             Some((id, pending)) => {
                 if peer_id.eq(&id) {
+                    // A repeat from the same peer adds no vote; the batch stays pending.
+                    self.request_state.pending_batch = Some((id, pending));
                     return Ok(CFHeaderChanges::AddedToQueue);
                 }
                 if pending.ne(&batch) {
@@ -220,7 +222,7 @@ impl Chain {
                     self.request_state.agreement_state.reset_agreements();
                     Ok(CFHeaderChanges::Conflict)
                 } else {
-                    self.request_state.agreement_state.got_agreement();
+                    self.request_state.agreement_state.got_agreement(peer_id);
                     if self.request_state.agreement_state.enough_agree() {
                         self.request_state.agreement_state.reset_agreements();
                         self.push_cf_header_batch(batch, request.stop_hash);
@@ -232,7 +234,7 @@ impl Chain {
                 }
             }
             None => {
-                self.request_state.agreement_state.got_agreement();
+                self.request_state.agreement_state.got_agreement(peer_id);
                 if self.request_state.agreement_state.enough_agree() {
                     self.request_state.agreement_state.reset_agreements();
                     self.push_cf_header_batch(batch, request.stop_hash);
@@ -1080,5 +1082,64 @@ mod tests {
         assert!(cf_header_sync_res.is_ok());
         assert_eq!(cf_header_sync_res.unwrap(), CFHeaderChanges::AddedToQueue);
         assert!(!chain.is_cf_headers_synced());
+    }
+
+    fn cf_headers(scenario: &ChainScenario, filter_hashes: Vec<FilterHash>) -> CFHeaders {
+        CFHeaders {
+            filter_type: 0x00,
+            stop_hash: scenario.last_block_hash(),
+            previous_filter_header: scenario.prev_header(),
+            filter_hashes,
+        }
+    }
+
+    #[tokio::test]
+    async fn one_peer_repeating_a_batch_is_one_vote() {
+        let mut chain = new_regtest(base_block(), 2);
+        let scenario = load_scenario();
+        assert!(chain.sync_chain(scenario.most_work_headers()).is_ok());
+        chain.next_cf_header_message();
+        let stale_hash = scenario.stale_chain[0].filter_hash();
+        let mut forged_hashes = scenario.n_most_work_filter_hashes(4);
+        forged_hashes.push(stale_hash);
+        let forged = cf_headers(&scenario, forged_hashes);
+        for copy in 1..=5 {
+            let changes = chain.sync_cf_headers(7.into(), forged.clone()).unwrap();
+            assert_eq!(
+                changes,
+                CFHeaderChanges::AddedToQueue,
+                "copy {copy} of the batch"
+            );
+        }
+        assert!(!chain.is_cf_headers_synced());
+        let tip = scenario.last_block_hash();
+        assert_ne!(chain.header_chain.filter_hash(tip), Some(stale_hash));
+        // A second peer with the real batch disagrees: a conflict, never the forged batch.
+        let honest = cf_headers(&scenario, scenario.n_most_work_filter_hashes(5));
+        let changes = chain.sync_cf_headers(8.into(), honest).unwrap();
+        assert_eq!(changes, CFHeaderChanges::Conflict);
+        assert!(!chain.is_cf_headers_synced());
+    }
+
+    #[tokio::test]
+    async fn two_peers_cannot_meet_a_quorum_of_three() {
+        let mut chain = new_regtest(base_block(), 3);
+        let scenario = load_scenario();
+        assert!(chain.sync_chain(scenario.most_work_headers()).is_ok());
+        chain.next_cf_header_message();
+        let batch = cf_headers(&scenario, scenario.n_most_work_filter_hashes(5));
+        for (n, peer) in [1, 2, 2, 1].into_iter().enumerate() {
+            let changes = chain.sync_cf_headers(peer.into(), batch.clone()).unwrap();
+            assert_eq!(
+                changes,
+                CFHeaderChanges::AddedToQueue,
+                "answer {} from peer {peer}",
+                n + 1
+            );
+        }
+        assert!(!chain.is_cf_headers_synced());
+        let changes = chain.sync_cf_headers(3.into(), batch).unwrap();
+        assert_eq!(changes, CFHeaderChanges::Extended);
+        assert!(chain.is_cf_headers_synced());
     }
 }
