@@ -36,6 +36,27 @@ use super::{
 const LOOP_TIMEOUT: Duration = Duration::from_millis(500);
 const V2_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(4);
 
+// Filter header requests sent to this peer and not yet answered.
+#[derive(Debug, Default, Clone, Copy)]
+struct CfHeaderRequests(u32);
+
+impl CfHeaderRequests {
+    fn ask(&mut self) {
+        self.0 = self.0.saturating_add(1);
+    }
+
+    // False for a batch nobody asked this peer for.
+    fn answer(&mut self) -> bool {
+        match self.0.checked_sub(1) {
+            Some(left) => {
+                self.0 = left;
+                true
+            }
+            None => false,
+        }
+    }
+}
+
 pub(crate) struct Peer {
     nonce: PeerId,
     source: Record,
@@ -49,6 +70,7 @@ pub(crate) struct Peer {
     message_state: MessageState,
     tx_queue: Arc<Mutex<BroadcastQueue>>,
     relay_policy: RelayPolicy,
+    cf_header_requests: CfHeaderRequests,
 }
 
 impl Peer {
@@ -79,6 +101,7 @@ impl Peer {
             timeout_config,
             message_state: MessageState::new(timeout_config.response_timeout),
             tx_queue,
+            cf_header_requests: CfHeaderRequests::default(),
         }
     }
 
@@ -236,6 +259,11 @@ impl Peer {
                 Ok(())
             }
             ReaderMessage::FilterHeaders(cf_headers) => {
+                // Unsolicited batches are dropped, so a peer cannot answer more than it was asked.
+                if !self.cf_header_requests.answer() {
+                    self.dialog.send_warning(Warning::UnsolicitedMessage);
+                    return Ok(());
+                }
                 self.main_thread_sender
                     .send(PeerThreadMessage {
                         nonce: self.nonce,
@@ -446,6 +474,7 @@ impl Peer {
                 self.write_bytes(writer, message).await?;
             }
             MainThreadMessage::GetFilterHeaders(config) => {
+                self.cf_header_requests.ask();
                 let message = message_generator.serialize(NetworkMessage::GetCFHeaders(config));
                 self.write_bytes(writer, message).await?;
             }
@@ -525,5 +554,21 @@ impl Peer {
             }
             Err(_) => Err(PeerError::HandshakeFailed),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CfHeaderRequests;
+
+    #[test]
+    fn only_requested_filter_headers_are_answers() {
+        let mut requests = CfHeaderRequests::default();
+        assert!(!requests.answer());
+        requests.ask();
+        requests.ask();
+        assert!(requests.answer());
+        assert!(requests.answer());
+        assert!(!requests.answer());
     }
 }

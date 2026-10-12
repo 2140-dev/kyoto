@@ -154,30 +154,33 @@ pub(crate) struct FilterHeaderRequest {
     pub expected_prev_filter_header: Option<FilterHeader>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FilterHeaderAgreements {
-    current: u8,
+    // The distinct peers that sent the pending batch: a peer repeating itself is one vote.
+    agreed: Vec<PeerId>,
     required: u8,
 }
 
 impl FilterHeaderAgreements {
     pub(crate) fn new(required: u8) -> Self {
         Self {
-            current: 0,
+            agreed: Vec::new(),
             required,
         }
     }
 
-    pub(crate) fn got_agreement(&mut self) {
-        self.current += 1;
+    pub(crate) fn got_agreement(&mut self, peer_id: PeerId) {
+        if !self.agreed.contains(&peer_id) {
+            self.agreed.push(peer_id);
+        }
     }
 
     pub(crate) fn enough_agree(&self) -> bool {
-        self.current.ge(&self.required)
+        self.agreed.len() >= usize::from(self.required)
     }
 
     pub(crate) fn reset_agreements(&mut self) {
-        self.current = 0;
+        self.agreed.clear();
     }
 }
 
