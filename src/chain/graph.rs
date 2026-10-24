@@ -97,6 +97,8 @@ pub struct BlockTree {
     active_tip: Tip,
     candidate_forks: Vec<Tip>,
     network: Network,
+    total_filters_synced: u32,
+    total_filter_headers_synced: u32,
 }
 
 #[allow(unused)]
@@ -109,6 +111,8 @@ impl BlockTree {
             active_tip: tip,
             candidate_forks: Vec::with_capacity(2),
             network,
+            total_filters_synced: 0,
+            total_filter_headers_synced: 0,
         }
     }
 
@@ -128,6 +132,8 @@ impl BlockTree {
             active_tip: tip,
             candidate_forks: Vec::with_capacity(2),
             network,
+            total_filters_synced: 0,
+            total_filter_headers_synced: 0,
         }
     }
 
@@ -285,6 +291,12 @@ impl BlockTree {
             self.canonical_hashes.remove(&height);
             if let Some(node) = self.headers.get(&hash) {
                 disconnections.push(IndexedHeader::new(node.height, node.header));
+                if node.filter_checked {
+                    self.total_filters_synced -= 1;
+                }
+                if node.filter_commitment.is_some() || node.cf_header_assumed {
+                    self.total_filter_headers_synced -= 1;
+                }
             }
         }
         loop {
@@ -298,9 +310,24 @@ impl BlockTree {
                                 if let Some(reorged) = self.headers.get(&reorged_hash) {
                                     disconnections
                                         .push(IndexedHeader::new(reorged.height, reorged.header));
+                                    if reorged.filter_checked {
+                                        self.total_filters_synced -= 1;
+                                    }
+                                    if reorged.filter_commitment.is_some()
+                                        || reorged.cf_header_assumed
+                                    {
+                                        self.total_filter_headers_synced -= 1;
+                                    }
                                 }
                                 *canonical_hash = curr_hash;
                                 connections.push(IndexedHeader::new(node.height, node.header));
+                                if node.filter_checked {
+                                    self.total_filters_synced += 1;
+                                }
+                                if node.filter_commitment.is_some() || node.cf_header_assumed {
+                                    self.total_filter_headers_synced += 1;
+                                }
+
                                 curr_hash = next;
                             } else {
                                 return (connections, disconnections);
@@ -309,6 +336,13 @@ impl BlockTree {
                         None => {
                             self.canonical_hashes.insert(node.height, curr_hash);
                             connections.push(IndexedHeader::new(node.height, node.header));
+                            if node.filter_checked {
+                                self.total_filters_synced += 1;
+                            }
+                            if node.filter_commitment.is_some() || node.cf_header_assumed {
+                                self.total_filter_headers_synced += 1;
+                            }
+
                             curr_hash = next;
                         }
                     }
@@ -404,13 +438,27 @@ impl BlockTree {
 
     pub(crate) fn set_commitment(&mut self, commitment: FilterCommitment, hash: BlockHash) {
         if let Some(node) = self.headers.get_mut(&hash) {
-            node.filter_commitment = Some(commitment)
+            //As it is a pub function, a caller could set_commitment twice for the same block, we
+            //don't want to increment counters in that case. But in normal operation it is not
+            //possible (perhaps).
+            debug_assert!(node.filter_commitment.is_none() && !node.cf_header_assumed);
+            node.filter_commitment = Some(commitment);
+            if self.canonical_hashes.get(&node.height) == Some(&hash) {
+                self.total_filter_headers_synced += 1;
+            }
         }
     }
 
     pub(crate) fn check_filter(&mut self, hash: BlockHash) {
         if let Some(node) = self.headers.get_mut(&hash) {
-            node.filter_checked = true
+            debug_assert!(!node.filter_checked);
+            node.filter_checked = true;
+            //As it is a pub function, a caller could check_filter twice for the same block, we
+            //don't want to increment counters in that case. But in normal operation it is not
+            //possible (perhaps).
+            if self.canonical_hashes.get(&node.height) == Some(&hash) {
+                self.total_filters_synced += 1;
+            }
         }
     }
 
@@ -418,6 +466,12 @@ impl BlockTree {
         let mut curr = self.tip_hash();
         while let Some(node) = self.headers.get_mut(&curr) {
             if node.height <= assumed_height {
+                if !(node.filter_commitment.is_some() || node.cf_header_assumed) {
+                    self.total_filter_headers_synced += 1;
+                }
+                if !node.filter_checked {
+                    self.total_filters_synced += 1;
+                }
                 node.filter_checked = true;
                 node.cf_header_assumed = true;
             }
@@ -438,25 +492,46 @@ impl BlockTree {
             node.cf_header_assumed = false;
             node.filter_commitment = None;
         }
+        self.total_filters_synced = 0;
+        self.total_filter_headers_synced = 0;
     }
 
     pub(crate) fn filter_headers_synced(&self) -> bool {
-        self.iter_data()
-            .all(|node| node.filter_commitment.is_some() || node.cf_header_assumed)
+        let synced = self.total_filter_headers_synced as usize == self.internal_chain_len();
+        // The sync state depends on this, so check the counter against a walk in debug builds.
+        debug_assert_eq!(
+            synced,
+            self.iter_data()
+                .all(|node| node.filter_commitment.is_some() || node.cf_header_assumed)
+        );
+        synced
     }
 
     pub(crate) fn filters_synced(&self) -> bool {
-        self.iter_data().all(|node| node.filter_checked)
+        let synced = self.total_filters_synced as usize == self.internal_chain_len();
+        // The sync state depends on this, so check the counter against a walk in debug builds.
+        debug_assert_eq!(synced, self.iter_data().all(|node| node.filter_checked));
+        synced
     }
 
     pub(crate) fn total_filters_synced(&self) -> u32 {
-        self.iter_data().filter(|node| node.filter_checked).count() as u32
+        self.total_filters_synced
     }
 
     pub(crate) fn total_filter_headers_synced(&self) -> u32 {
-        self.iter_data()
+        self.total_filter_headers_synced
+    }
+
+    // The same counts as the counters, computed by walking the whole canonical chain. This is how
+    // they were computed before the counters existed, and it is used in debug builds to check them.
+    #[cfg(debug_assertions)]
+    pub(crate) fn filter_counts_by_walk(&self) -> (u32, u32) {
+        let filter_headers = self
+            .iter_data()
             .filter(|node| node.filter_commitment.is_some() || node.cf_header_assumed)
-            .count() as u32
+            .count() as u32;
+        let filters = self.iter_data().filter(|node| node.filter_checked).count() as u32;
+        (filter_headers, filters)
     }
 
     pub(crate) fn locators(&self) -> Vec<BlockHash> {

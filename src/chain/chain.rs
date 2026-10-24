@@ -414,19 +414,25 @@ impl Chain {
     }
 
     pub(crate) fn send_chain_update(&self) {
+        let height = self.header_chain.height();
+        let total = self.header_chain.internal_chain_len() as u32;
+        let filter_headers = self.header_chain.total_filter_headers_synced();
+        let filters = self.header_chain.total_filters_synced();
+        // Compare the counters with a walk of the chain, and panic on any discrepancy.
+        #[cfg(debug_assertions)]
+        assert_eq!(
+            (filter_headers, filters),
+            self.header_chain.filter_counts_by_walk(),
+            "Filter counter discrepancy at height {height}: (filter headers, filters) counters vs walk"
+        );
         self.dialog.send_info(Info::Progress(Progress::new(
-            self.header_chain.total_filter_headers_synced(),
-            self.header_chain.total_filters_synced(),
-            self.header_chain.internal_chain_len() as u32,
-            self.header_chain.height(),
+            filter_headers,
+            filters,
+            total,
+            height,
         )));
         crate::debug!(format!(
-            "Headers: {} CFHeaders: ({}/{}) CFilters: ({}/{})",
-            self.header_chain.height(),
-            self.header_chain.total_filter_headers_synced(),
-            self.header_chain.internal_chain_len() as u32,
-            self.header_chain.total_filters_synced(),
-            self.header_chain.internal_chain_len() as u32,
+            "Headers: {height} CFHeaders: ({filter_headers}/{total}) CFilters: ({filters}/{total})"
         ));
     }
 }
