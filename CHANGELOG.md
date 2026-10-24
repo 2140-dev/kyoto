@@ -5,6 +5,46 @@ Notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.8.0
+
+## Added
+
+- Two variants on the `Info` message for CF header and CFilter progress
+- CPFP regression test
+
+## Changed
+
+- `Info::Progress` and `Progress` are removed
+- `bitcoin::Address` re-export removed
+- `Warning` channel is now bounded
+- Bumped `addrman` to `0.2.1`
+- Switch from `corepc` to `bitcoind = 0.43.1`
+
+## Fixed
+
+- End `Peer` task when the reader exits
+- Do not reset the stale block timer on empty headers (Loupe report)
+- Cancel readers on connection exit (Loupe report)
+- Fix Socks5 domain parsing (Loupe report)
+- Only disconnect offending peers when CF headers are malformed (Loupe report)
+- Scan every input and output when matching gossiped transactions (Loupe report)
+- Only remove header after checking work (Loupe report)
+- Theoretic short but high work chains can be reorged to (Loupe report)
+- Bound `write_bytes` by an absolute timeout (Loupe report)
+- Adjust difficulty based on ancestor hashes (Loupe report)
+- Drop peers with a full outbound buffer (Loupe report)
+- Out of order filters do not stall node (Loupe report)
+- Space block retries based on config (Loupe report)
+- Track CFHeaders messages by hash (Loupe report)
+- Prevent `getdata` probing (Loupe report)
+- Ignore stale filters for recently reorged blocks (Loupe report)
+- Always fetch witness block for feerates (Loupe report)
+- Check witness commitment when estimating fees (Loupe report)
+- Same peer cannot share the same CF headers (Loupe report)
+- Reissue same stophash request for incomplete filters
+- Reject CFHeaders for the current stop hash with a stale prev header
+- Route DNS over Socks5 when proxy is set (Loupe report)
+
 ## 0.7.0
 
 ## Added
