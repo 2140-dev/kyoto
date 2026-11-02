@@ -36,6 +36,8 @@ use crate::{
 use super::{AddressBook, ConnectionType, MainThreadMessage, PeerThreadMessage};
 
 const LOCAL_HOST: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+// How many addresses are drawn from the address book before giving up on finding a new peer.
+const NEW_PEER_SELECT_ATTEMPTS: usize = 20;
 
 fn deliver(
     ptx: &Sender<MainThreadMessage>,
@@ -371,6 +373,12 @@ impl PeerMap {
         if self.whitelist_only {
             return None;
         }
+        let connected: Vec<(AddrV2, u16)> = self
+            .map
+            .values()
+            .filter(|peer| !peer.handle.is_finished())
+            .map(|peer| peer.record.network_addr())
+            .collect();
         let mut db_lock = self.db.lock().await;
         if db_lock.is_empty() {
             crate::debug!("Bootstrapping peers with DNS");
@@ -394,7 +402,15 @@ impl PeerMap {
             let source = AddrV2::Ipv4(Ipv4Addr::new(1, 1, 1, 1));
             db_lock.add_gossiped(addr_iter, &source);
         }
-        db_lock.select()
+        // Select a peer to which we're not yet connected
+        for _ in 0..NEW_PEER_SELECT_ATTEMPTS {
+            if let Some(record) = db_lock.select() {
+                if !connected.contains(&record.network_addr()) {
+                    return Some(record);
+                }
+            }
+        }
+        None
     }
 
     // We tried this peer and successfully connected.
