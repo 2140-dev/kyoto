@@ -431,27 +431,27 @@ impl FilterRate {
 }
 
 #[derive(Debug, Clone, Copy, std::hash::Hash, PartialEq, Eq, PartialOrd, Ord)]
-struct TimeSensitiveId([u8; 32]);
+enum TimeSensitiveId {
+    Headers,
+    FilterHeaders([u8; 32]),
+    Filters,
+    Ping,
+    Block([u8; 32]),
+}
 
 impl TimeSensitiveId {
-    const HEADER_MSG: Self = Self([1; 32]);
+    const HEADER_MSG: Self = Self::Headers;
 
-    const CF_HEADER_MSG: Self = Self([2; 32]);
+    const C_FILTER_MSG: Self = Self::Filters;
 
-    const C_FILTER_MSG: Self = Self([3; 32]);
-
-    const PING: Self = Self([4; 32]);
+    const PING: Self = Self::Ping;
 
     fn from_slice(slice: [u8; 32]) -> Self {
-        Self(slice)
+        Self::Block(slice)
     }
 
     fn from_cf_headers_stop_hash(stop_hash: BlockHash) -> Self {
-        let mut id = stop_hash.to_byte_array();
-        for (byte, tag) in id.iter_mut().zip(Self::CF_HEADER_MSG.0) {
-            *byte ^= tag;
-        }
-        Self(id)
+        Self::FilterHeaders(stop_hash.to_byte_array())
     }
 }
 
