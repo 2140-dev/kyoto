@@ -408,6 +408,11 @@ struct FilterRate {
 
 impl FilterRate {
     fn batch_requested(&mut self, stop_hash: BlockHash) {
+        if let Some((hash, _)) = self.waiting_for {
+            if hash.eq(&stop_hash) {
+                return;
+            }
+        }
         self.waiting_for = Some((stop_hash, Instant::now()))
     }
 
