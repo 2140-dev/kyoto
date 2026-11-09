@@ -457,12 +457,12 @@ impl BlockTree {
             match height {
                 Some(height) => match self.block_hash_at_height(height) {
                     Some(hash) => locators.push(hash),
-                    None => return locators.into_iter().rev().collect(),
+                    None => return locators,
                 },
-                None => return locators.into_iter().rev().collect(),
+                None => return locators,
             }
         }
-        locators.into_iter().rev().collect()
+        locators
     }
 
     pub(crate) fn iter_data(&self) -> BlockNodeIterator<'_> {
@@ -918,5 +918,27 @@ mod tests {
             AcceptHeaderChanges::Reorganization { .. }
         ));
         assert_eq!(tree.tip_hash(), fork_next.block_hash());
+    }
+
+    #[test]
+    fn test_locators_start_at_tip() {
+        let mut tree = BlockTree::from_genesis(Network::Regtest);
+        let genesis = genesis_block(Network::Regtest).header;
+        let mut parent = genesis;
+        for _ in 0..1100 {
+            let child = mine_child(parent, 600, genesis.bits);
+            tree.accept_header(child);
+            parent = child;
+        }
+        let locators = tree.locators();
+        assert_eq!(locators.len(), LOCATOR_INDEX.len() + 1);
+        assert_eq!(locators[0], tree.tip_hash());
+        for (locator, depth) in locators[1..].iter().zip(LOCATOR_INDEX) {
+            assert_eq!(Some(*locator), tree.block_hash_at_height(1100 - depth));
+        }
+        let mut short = BlockTree::from_genesis(Network::Regtest);
+        let child = mine_child(genesis, 600, genesis.bits);
+        short.accept_header(child);
+        assert_eq!(short.locators().first(), Some(&child.block_hash()));
     }
 }
