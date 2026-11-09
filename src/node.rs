@@ -506,8 +506,8 @@ impl Node {
                     }
                 }
                 HeaderSyncEffect::Reorg(reorgs) => {
-                    if self.state != NodeState::HeadersSynced {
-                        self.state = NodeState::HeadersSynced;
+                    if self.state != NodeState::Behind {
+                        self.state = NodeState::Behind;
                     }
                     self.dialog
                         .send_info(Info::NewChainHeight(self.chain.header_chain.height()));
