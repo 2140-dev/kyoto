@@ -37,7 +37,7 @@ use crate::{
 };
 
 use super::{
-    client::Client,
+    client::{Client, EventReceiver},
     error::NodeError,
     messages::{ClientMessage, Event, Info, SyncUpdate, Warning},
     Dialog,
@@ -47,6 +47,13 @@ pub(crate) const WTXID_VERSION: u32 = 70016;
 const LOOP_TIMEOUT: Duration = Duration::from_millis(10);
 
 type PeerRequirement = usize;
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+enum FilterDownloads {
+    #[default]
+    Running,
+    Paused,
+}
 
 /// A compact block filter node. Nodes download Bitcoin block headers, block filters, and blocks to send relevant events to a client.
 #[derive(Debug)]
@@ -60,6 +67,7 @@ pub struct Node {
     client_recv: UnboundedReceiver<ClientMessage>,
     peer_recv: Receiver<PeerThreadMessage>,
     headers_only_sync: bool,
+    filter_downloads: FilterDownloads,
 }
 
 impl Node {
@@ -80,9 +88,10 @@ impl Node {
         let (warn_tx, warn_rx) = mpsc::channel::<Warning>(512);
         let (event_tx, event_rx) = mpsc::unbounded_channel::<Event>();
         let (ctx, crx) = mpsc::unbounded_channel::<ClientMessage>();
-        let client = Client::new(info_rx, warn_rx, event_rx, ctx);
         // A structured way to talk to the client
         let dialog = Arc::new(Dialog::new(info_tx, warn_tx, event_tx));
+        let event_rx = EventReceiver::new(event_rx, Arc::clone(&dialog.pending_events));
+        let client = Client::new(info_rx, warn_rx, event_rx, ctx);
         // We always assume we are behind
         let state = NodeState::Behind;
         // Configure the peer manager
@@ -119,6 +128,7 @@ impl Node {
                 client_recv: crx,
                 peer_recv: mrx,
                 headers_only_sync,
+                filter_downloads: Default::default(),
             },
             client,
         )
@@ -377,6 +387,10 @@ impl Node {
                 if self.chain.is_filters_synced() {
                     self.state = NodeState::FiltersSynced;
                     self.emit_sync_complete();
+                } else if self.filter_downloads == FilterDownloads::Paused {
+                    if let Some(next_filters) = self.next_filter_request() {
+                        self.peer_map.send_random(next_filters);
+                    }
                 }
             }
             NodeState::FiltersSynced => {
@@ -428,11 +442,20 @@ impl Node {
                 self.chain.next_cf_header_message(),
             ));
         } else if !self.chain.is_filters_synced() {
-            return Some(MainThreadMessage::GetFilters(
-                self.chain.next_filter_message(),
-            ));
+            return self.next_filter_request();
         }
         None
+    }
+
+    fn next_filter_request(&mut self) -> Option<MainThreadMessage> {
+        if !self.dialog.can_fit_filter_batch() {
+            self.filter_downloads = FilterDownloads::Paused;
+            return None;
+        }
+        self.filter_downloads = FilterDownloads::Running;
+        Some(MainThreadMessage::GetFilters(
+            self.chain.next_filter_message(),
+        ))
     }
 
     // We accepted a handshake with a peer but we may disconnect if they do not support CBF
@@ -564,8 +587,7 @@ impl Node {
             Ok(potential_message) => {
                 let FilterCheck { was_last_in_batch } = potential_message;
                 if was_last_in_batch && !self.chain.is_filters_synced() {
-                    let next_filters = self.chain.next_filter_message();
-                    return Some(MainThreadMessage::GetFilters(next_filters));
+                    return self.next_filter_request();
                 }
                 None
             }
@@ -684,9 +706,7 @@ impl Node {
                     ))
                 } else {
                     self.state = NodeState::FilterHeadersSynced;
-                    Some(MainThreadMessage::GetFilters(
-                        self.chain.next_filter_message(),
-                    ))
+                    self.next_filter_request()
                 }
             }
         }

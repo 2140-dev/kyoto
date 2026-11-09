@@ -6,7 +6,7 @@ use std::{
 
 use bip157::{
     chain::{checkpoints::HashCheckpoint, BlockHeaderChanges, ChainState},
-    client::Client,
+    client::{Client, EventReceiver},
     node::Node,
     BlockHash, Event, GossipMonitorRequestBuilder, Info, Package, ServiceFlags, Transaction,
     TrustedPeer, Warning,
@@ -25,7 +25,6 @@ use bitcoin::{
 use bitcoind::serde_json;
 use bitcoind::{anyhow, exe_path};
 use tokio::sync::mpsc::Receiver;
-use tokio::sync::mpsc::UnboundedReceiver;
 
 fn setup_debug_output() {
     std::env::set_var("KYOTO_DEBUG_OUTPUT", "1");
@@ -92,7 +91,7 @@ async fn invalidate_block(rpc: &bitcoind::Client, hash: &bitcoin::BlockHash) {
     tokio::time::sleep(Duration::from_secs(2)).await;
 }
 
-async fn sync_assert(best: &bitcoin::BlockHash, channel: &mut UnboundedReceiver<Event>) {
+async fn sync_assert(best: &bitcoin::BlockHash, channel: &mut EventReceiver) {
     loop {
         tokio::select! {
             event = channel.recv() => {

@@ -66,6 +66,10 @@ use chain::Filter;
 use std::{
     collections::HashSet,
     net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
 };
 
 // Re-exports
@@ -84,7 +88,7 @@ use tokio::sync::mpsc::UnboundedSender;
 pub use {
     crate::builder::Builder,
     crate::chain::ChainState,
-    crate::client::{Client, Requester},
+    crate::client::{Client, EventReceiver, Requester},
     crate::error::{ClientError, NodeError},
     crate::messages::{Event, Info, RejectPayload, SyncUpdate, Warning},
     crate::node::Node,
@@ -439,9 +443,14 @@ struct Dialog {
     info_tx: Sender<Info>,
     warn_tx: Sender<Warning>,
     event_tx: UnboundedSender<Event>,
+    pending_events: Arc<AtomicUsize>,
 }
 
 impl Dialog {
+    // An upper bound on the amount of pending events. Limited systems may not have sufficient
+    // memory to hold pending filters in the channel.
+    const MAX_PENDING_EVENTS: usize = 10_000;
+
     fn new(
         info_tx: Sender<Info>,
         warn_tx: Sender<Warning>,
@@ -451,6 +460,7 @@ impl Dialog {
             info_tx,
             warn_tx,
             event_tx,
+            pending_events: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -463,7 +473,18 @@ impl Dialog {
     }
 
     fn send_event(&self, message: Event) {
+        self.pending_events.fetch_add(1, Ordering::Relaxed);
         let _ = self.event_tx.send(message);
+    }
+
+    // If the events in a channel exceed a certain capacity, we temporarily stop fetching filters to
+    // avoid OOM on limited systems. `Info` and `Warning` messages have a maximum channel size
+    // before messages are dropped, so this does not apply. We allow going over this budget in the
+    // case of header chain changes, which are important to process and do not consume high amounts
+    // of memory.
+    fn can_fit_filter_batch(&self) -> bool {
+        self.pending_events.load(Ordering::Relaxed) + (chain::chain::FILTER_BATCH_SIZE as usize)
+            < Self::MAX_PENDING_EVENTS
     }
 }
 
