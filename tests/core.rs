@@ -574,6 +574,66 @@ async fn stop_reorg_start_on_orphan() {
 }
 
 #[tokio::test]
+#[ignore = "local test only due to long runtime"]
+async fn reorg_larger_than_header_batch_syncs_to_tip() {
+    setup_debug_output();
+    let (bitcoind, socket_addr) = start_bitcoind(true).unwrap();
+    let rpc = &bitcoind.client;
+    let tempdir: PathBuf = tempfile::TempDir::new().unwrap().path().to_owned();
+    let miner = rpc.new_address().unwrap();
+    mine_blocks(rpc, &miner, 10, 2).await;
+    let best = best_hash(rpc);
+    let (node, client) = new_node(
+        socket_addr,
+        tempdir.clone(),
+        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+    );
+    tokio::task::spawn(async move { node.run().await });
+    let Client {
+        requester,
+        info_rx,
+        warn_rx,
+        event_rx: mut channel,
+    } = client;
+    let handle = tokio::task::spawn(async move { print_logs(info_rx, warn_rx).await });
+    let mut headers = Vec::new();
+    while let Some(message) = channel.recv().await {
+        match message {
+            bip157::messages::Event::ChainUpdate(BlockHeaderChanges::Connected(header)) => {
+                headers.push(header);
+            }
+            bip157::messages::Event::FiltersSynced(update) => {
+                assert_eq!(update.tip().hash, best);
+                break;
+            }
+            _ => {}
+        }
+    }
+    drop(handle);
+    requester.shutdown().unwrap();
+    // Replace the stale chain with one that is more than a full `headers` message longer
+    let fork_point = headers.iter().find(|header| header.height == 5).unwrap();
+    invalidate_block(rpc, &fork_point.header.block_hash()).await;
+    for _ in 0..5 {
+        mine_blocks(rpc, &miner, 500, 0).await;
+    }
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    let best = best_hash(rpc);
+    let (node, client) = new_node(socket_addr, tempdir, ChainState::Snapshot(headers));
+    tokio::task::spawn(async move { node.run().await });
+    let Client {
+        requester,
+        info_rx,
+        warn_rx,
+        event_rx: mut channel,
+    } = client;
+    tokio::task::spawn(async move { print_logs(info_rx, warn_rx).await });
+    sync_assert(&best, &mut channel).await;
+    requester.shutdown().unwrap();
+    rpc.stop().unwrap();
+}
+
+#[tokio::test]
 async fn tx_can_broadcast() {
     setup_debug_output();
     let amount_to_us = Amount::from_sat(100_000);
