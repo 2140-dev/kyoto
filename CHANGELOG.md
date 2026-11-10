@@ -5,6 +5,25 @@ Notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.9.0
+
+## Added
+
+- `EventReceiver` now handles emitted events
+
+## Changed
+
+- `UnboundedReceiver` removed from `Client`
+
+## Fixed
+
+- Avoid connecting to the same peer multiple times
+- Only refresh timeout for valid responses (Loupe report)
+- Only refresh the filter rate for new requests (Loupe report)
+- Send block locators from the tip backwards (Loupe report)
+- Keep requesting headers after a reorganization (Loupe report)
+- Changing CF header range discards stale batch (Loupe report)
+
 ## 0.8.1
 
 ## Added
