@@ -278,12 +278,16 @@ impl Chain {
             .header_chain
             .block_hash_at_height(start_height + CF_HEADER_BATCH_SIZE)
             .unwrap_or(self.header_chain.tip_hash());
-        self.request_state.push_stop_hash(stop_hash);
-        self.request_state.last_filter_header_request = Some(FilterHeaderRequest {
+        let request = Some(FilterHeaderRequest {
             expected_prev_filter_header: prev_header,
             start_height,
             stop_hash,
         });
+        if self.request_state.last_filter_header_request.ne(&request) {
+            self.request_state.pending_batch = None;
+        }
+        self.request_state.push_stop_hash(stop_hash);
+        self.request_state.last_filter_header_request = request;
         GetCFHeaders {
             filter_type: self.filter_type.into(),
             start_height,
@@ -550,6 +554,44 @@ mod tests {
     fn load_scenario() -> ChainScenario {
         let file = File::open("./tests/data/chain_scenario_one.json").unwrap();
         serde_json::from_reader(&file).unwrap()
+    }
+
+    #[test]
+    fn changing_cfheader_range_discards_votes_for_the_old_request() {
+        let scenario = load_scenario();
+        let mut chain = new_regtest(base_block(), 2);
+        chain.sync_chain(scenario.n_most_work_headers(4)).unwrap();
+        let old_request = chain.next_cf_header_message();
+        let old_response = CFHeaders {
+            filter_type: 0,
+            stop_hash: old_request.stop_hash,
+            previous_filter_header: scenario.prev_header(),
+            filter_hashes: scenario.n_most_work_filter_hashes(4),
+        };
+        assert_eq!(
+            chain.sync_cf_headers(1.into(), old_response).unwrap(),
+            CFHeaderChanges::AddedToQueue
+        );
+        chain
+            .sync_chain(vec![scenario.last_block_header()])
+            .unwrap();
+        let request = chain.next_cf_header_message();
+        assert_ne!(request.stop_hash, old_request.stop_hash);
+        let response = CFHeaders {
+            filter_type: 0,
+            stop_hash: request.stop_hash,
+            previous_filter_header: scenario.prev_header(),
+            filter_hashes: scenario.n_most_work_filter_hashes(5),
+        };
+        assert_eq!(
+            chain.sync_cf_headers(1.into(), response.clone()).unwrap(),
+            CFHeaderChanges::AddedToQueue
+        );
+        assert_eq!(
+            chain.sync_cf_headers(2.into(), response).unwrap(),
+            CFHeaderChanges::Extended
+        );
+        assert!(chain.is_cf_headers_synced());
     }
 
     #[test]
