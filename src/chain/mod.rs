@@ -146,7 +146,7 @@ pub(crate) struct FilterRequest {
     pub stop_height: u32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct FilterHeaderRequest {
     pub start_height: u32,
     pub stop_hash: BlockHash,
