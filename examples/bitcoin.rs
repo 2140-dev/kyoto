@@ -23,7 +23,7 @@ async fn main() {
     let mut addresses = HashSet::new();
     addresses.insert(address);
     // Query DNS seeds for faster peer discovery
-    // let seeds = lookup_host("seed.bitcoin.sipa.be").await;
+    // let seeds = bip157::lookup_host("seed.rustaceanrob.com").await;
     // Create a new node builder
     let builder = Builder::new(NETWORK);
     // Add node preferences and build the node/client
@@ -32,6 +32,7 @@ async fn main() {
         .required_peers(2)
         // Only scan for taproot scripts
         .chain_state(ChainState::Checkpoint(checkpoint))
+        // .headers_only_sync()
         // Add some initial peers
         // .add_peers(seeds.into_iter().map(From::from))
         // Connections over Tor are supported by Socks5 proxy
