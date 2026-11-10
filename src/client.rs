@@ -2,7 +2,11 @@ use bitcoin::p2p::address::AddrV2;
 use bitcoin::p2p::ServiceFlags;
 use bitcoin::{Amount, Transaction, Wtxid};
 use bitcoin::{BlockHash, FeeRate};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::task::{Context, Poll};
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::oneshot;
 
@@ -26,14 +30,14 @@ pub struct Client {
     /// Receive warning messages from a node.
     pub warn_rx: mpsc::Receiver<Warning>,
     /// Receive [`Event`] from a node to act on.
-    pub event_rx: mpsc::UnboundedReceiver<Event>,
+    pub event_rx: EventReceiver,
 }
 
 impl Client {
     pub(crate) fn new(
         info_rx: mpsc::Receiver<Info>,
         warn_rx: mpsc::Receiver<Warning>,
-        event_rx: mpsc::UnboundedReceiver<Event>,
+        event_rx: EventReceiver,
         ntx: UnboundedSender<ClientMessage>,
     ) -> Self {
         Self {
@@ -42,6 +46,49 @@ impl Client {
             warn_rx,
             event_rx,
         }
+    }
+}
+
+/// Receive [`Event`] from a node.
+#[derive(Debug)]
+pub struct EventReceiver {
+    rx: mpsc::UnboundedReceiver<Event>,
+    pending_events: Arc<AtomicUsize>,
+}
+
+// This wrapper class tells us when a client has removed an event from the channel. Filters can be
+// quite large, so before we request them we make sure the client is not behind.
+impl EventReceiver {
+    pub(crate) fn new(
+        rx: mpsc::UnboundedReceiver<Event>,
+        pending_events: Arc<AtomicUsize>,
+    ) -> Self {
+        Self { rx, pending_events }
+    }
+
+    /// Receive the next event, or `None` if the node has stopped. This method is cancel safe.
+    pub async fn recv(&mut self) -> Option<Event> {
+        let event = self.rx.recv().await;
+        if event.is_some() {
+            self.pending_events.fetch_sub(1, Ordering::Relaxed);
+        }
+        event
+    }
+
+    /// Try to receive the next event without waiting.
+    pub fn try_recv(&mut self) -> Result<Event, TryRecvError> {
+        let event = self.rx.try_recv()?;
+        self.pending_events.fetch_sub(1, Ordering::Relaxed);
+        Ok(event)
+    }
+
+    /// Poll to receive the next event, or `None` if the node has stopped.
+    pub fn poll_recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<Event>> {
+        let poll = self.rx.poll_recv(cx);
+        if let Poll::Ready(Some(_)) = poll {
+            self.pending_events.fetch_sub(1, Ordering::Relaxed);
+        }
+        poll
     }
 }
 

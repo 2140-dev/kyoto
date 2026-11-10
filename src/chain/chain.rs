@@ -17,7 +17,7 @@ use crate::{chain::BlockHeaderChanges, messages::Event, Dialog, Info};
 use crate::{FilterType, IndexedFilter};
 
 const CF_HEADER_BATCH_SIZE: u32 = 1_999;
-const FILTER_BATCH_SIZE: u32 = 999;
+pub(crate) const FILTER_BATCH_SIZE: u32 = 999;
 
 #[derive(Debug)]
 pub(crate) struct Chain {
