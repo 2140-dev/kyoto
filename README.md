@@ -9,7 +9,7 @@
     <a href="https://github.com/2140-dev/kyoto/blob/master/LICENSE"><img alt="MIT or Apache-2.0 Licensed" src="https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg"/></a>
     <a href="https://github.com/2140-dev/kyoto/actions?query=workflow%3A%22Build+%26+Test%22"><img alt="CI Status" src="https://github.com/2140-dev/kyoto/workflows/CI/badge.svg"/></a>
     <a href="https://docs.rs/bip157"><img alt="API Docs" src="https://img.shields.io/badge/docs.rs-bip157-green"/></a>
-    <a href="https://blog.rust-lang.org/2022/08/11/Rust-1.63.0.html"><img alt="Rustc Version 1.63.0+" src="https://img.shields.io/badge/rustc-1.63.0%2B-lightgrey.svg"/></a>
+    <a href="https://blog.rust-lang.org/2022/08/11/Rust-1.63.0.html"><img alt="Rustc Version 1.84.0+" src="https://img.shields.io/badge/rustc-1.63.0%2B-lightgrey.svg"/></a>
   </p>
 </div>
 
