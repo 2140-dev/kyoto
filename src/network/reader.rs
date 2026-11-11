@@ -1,3 +1,7 @@
+use super::error::ReaderError;
+use super::inbound::MessageParser;
+use super::TimeSensitiveId;
+use bitcoin::FeeRate;
 use bitcoin::{
     block::Header,
     hashes::Hash,
@@ -11,15 +15,8 @@ use bitcoin::{
     },
     Block, Transaction,
 };
-use bitcoin::{FeeRate, Wtxid};
 use tokio::io::AsyncRead;
 use tokio::sync::mpsc::Sender;
-
-use crate::messages::RejectPayload;
-
-use super::error::ReaderError;
-use super::inbound::MessageParser;
-use super::TimeSensitiveId;
 
 // From Bitcoin Core PR #29575
 const MAX_ADDR: usize = 1_000;
@@ -99,13 +96,7 @@ impl<R: AsyncRead + Send + Sync + Unpin> Reader<R> {
             NetworkMessage::GetBlockTxn(_) => None,
             NetworkMessage::BlockTxn(_) => None,
             NetworkMessage::Alert(_) => None,
-            NetworkMessage::Reject(rejection) => {
-                let wtxid = Wtxid::from(rejection.hash);
-                Some(ReaderMessage::Reject(RejectPayload {
-                    reason: Some(rejection.ccode),
-                    wtxid,
-                }))
-            }
+            NetworkMessage::Reject(_) => None,
             // 70013
             NetworkMessage::FeeFilter(i) => {
                 if i < 0 {
@@ -151,7 +142,6 @@ pub(in crate::network) enum ReaderMessage {
     Block(Block),
     Inventory(Vec<Inventory>),
     Transaction(Transaction),
-    Reject(RejectPayload),
     Disconnect,
     Verack,
     Ping(u64),
