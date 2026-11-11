@@ -398,15 +398,6 @@ impl Peer {
                     .await?;
                 Ok(())
             }
-            ReaderMessage::Reject(payload) => {
-                if self.message_state.unknown_rejection(payload.wtxid) {
-                    self.dialog.send_warning(Warning::UnsolicitedMessage);
-                    return Err(PeerError::DisconnectCommand);
-                }
-                self.dialog
-                    .send_warning(Warning::TransactionRejected { payload });
-                Ok(())
-            }
             ReaderMessage::Disconnect => Err(PeerError::DisconnectCommand),
         }
     }
