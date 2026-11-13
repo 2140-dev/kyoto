@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 
+use bitcoin::BlockHash;
+
 use crate::impl_sourceless_error;
 
 /// Errors that prevent the node from running.
@@ -57,6 +59,8 @@ pub enum FetchBlockError {
     UnknownHash,
     /// The witness data of the block does not match the commitment in the coinbase.
     InvalidWitnessCommitment,
+    /// The block was reorganized out of the chain of most work while the request was pending.
+    Reorged(BlockHash),
 }
 
 impl core::fmt::Display for FetchBlockError {
@@ -76,6 +80,12 @@ impl core::fmt::Display for FetchBlockError {
                 write!(
                     f,
                     "the block witness data does not match the coinbase commitment."
+                )
+            }
+            FetchBlockError::Reorged(hash) => {
+                write!(
+                    f,
+                    "block {hash} was reorganized out of the chain of most work while pending."
                 )
             }
         }
