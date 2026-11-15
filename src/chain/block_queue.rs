@@ -86,11 +86,20 @@ impl BlockQueue {
     }
 
     pub(crate) fn remove(&mut self, hashes: &[BlockHash]) {
-        self.queue.retain(|request| !hashes.contains(&request.hash));
-        if let Some(want) = self.want.as_ref() {
-            if hashes.contains(&want.hash) {
-                self.want = None;
-            }
+        let (reorged, retained): (VecDeque<Request>, VecDeque<Request>) = self
+            .queue
+            .drain(..)
+            .partition(|request| hashes.contains(&request.hash));
+        self.queue = retained;
+        for request in reorged {
+            let _ = request
+                .recipient
+                .send(Err(FetchBlockError::Reorged(request.hash)));
+        }
+        if let Some(want) = self.want.take_if(|want| hashes.contains(&want.hash)) {
+            let _ = want
+                .recipient
+                .send(Err(FetchBlockError::Reorged(want.hash)));
         }
     }
 }
@@ -249,10 +258,14 @@ mod test {
     fn test_blocks_removed() {
         let [hash_1, hash_2, hash_3] = three_block_hashes();
         let mut queue = BlockQueue::new(Duration::from_secs(5));
-        queue.add(hash_1.dummy_request());
-        queue.add(hash_2.dummy_request());
-        queue.add(hash_3.dummy_request());
-        queue.add(hash_1.dummy_request());
+        let (tx_1, mut rx_1) = oneshot::channel();
+        let (tx_2, mut rx_2) = oneshot::channel();
+        let (tx_3, mut rx_3) = oneshot::channel();
+        let (tx_4, mut rx_4) = oneshot::channel();
+        queue.add(ClientRequest::new((hash_1, None), tx_1));
+        queue.add(ClientRequest::new((hash_2, None), tx_2));
+        queue.add(ClientRequest::new((hash_3, None), tx_3));
+        queue.add(ClientRequest::new((hash_1, None), tx_4));
         assert_eq!(queue.queue.len(), 4);
         assert_eq!(queue.pop(), Some((hash_1, None)));
         assert_eq!(
@@ -261,8 +274,18 @@ mod test {
         );
         queue.remove(&[hash_1]);
         assert_eq!(queue.want.as_ref().map(|request| request.hash), None);
+        assert!(
+            matches!(rx_1.try_recv(), Ok(Err(FetchBlockError::Reorged(hash))) if hash == hash_1)
+        );
+        assert!(
+            matches!(rx_4.try_recv(), Ok(Err(FetchBlockError::Reorged(hash))) if hash == hash_1)
+        );
         queue.remove(&[hash_2]);
+        assert!(
+            matches!(rx_2.try_recv(), Ok(Err(FetchBlockError::Reorged(hash))) if hash == hash_2)
+        );
         assert_eq!(queue.queue.len(), 1);
         assert_eq!(queue.pop(), Some((hash_3, None)));
+        assert!(rx_3.try_recv().is_err());
     }
 }
