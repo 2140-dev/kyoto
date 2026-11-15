@@ -601,9 +601,9 @@ impl GossipMonitorRequestBuilder {
     }
 
     /// Watch for these [`OutPoint`] used as an input in unconfirmed transactions.
-    pub fn from_expected_inputs(txins: impl IntoIterator<Item = OutPoint>) -> Self {
+    pub fn from_expected_outpoints(outpoints: impl IntoIterator<Item = OutPoint>) -> Self {
         let mut op_set = HashSet::new();
-        op_set.extend(txins);
+        op_set.extend(outpoints);
         Self {
             scripts: HashSet::new(),
             txins: op_set,
@@ -611,14 +611,14 @@ impl GossipMonitorRequestBuilder {
     }
 
     /// Add scripts to the request.
-    pub fn add_scripts(mut self, scripts: impl IntoIterator<Item = ScriptBuf>) -> Self {
+    pub fn add_output_scripts(mut self, scripts: impl IntoIterator<Item = ScriptBuf>) -> Self {
         self.scripts.extend(scripts);
         self
     }
 
     /// Add outpoints to the request.
-    pub fn add_outpoints(mut self, txins: impl IntoIterator<Item = OutPoint>) -> Self {
-        self.txins.extend(txins);
+    pub fn add_outpoints(mut self, outpoints: impl IntoIterator<Item = OutPoint>) -> Self {
+        self.txins.extend(outpoints);
         self
     }
 
