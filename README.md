@@ -61,6 +61,10 @@ Please read [CONTRIBUTING.md](./CONTRIBUTING.md) to get started.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
+## Security
+
+This project is scanned for vulnerabilities on a regular schedule by [Project Loupe](https://github.com/project-loupe). Mitigations are handled publicly. If you believe you have found a vulnerability, open an issue.
+
 ## License
 
 Licensed under either of
