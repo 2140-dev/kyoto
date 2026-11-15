@@ -5,7 +5,7 @@ use bitcoin::BlockHash;
 use crate::impl_sourceless_error;
 
 /// Errors that prevent the node from running.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NodeError {
     /// The node has exhausted all possible options for peers.
     NoReachablePeers,
@@ -24,7 +24,7 @@ impl core::fmt::Display for NodeError {
 impl_sourceless_error!(NodeError);
 
 /// Errors occurring when the client is talking to the node.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClientError {
     /// The channel to the node was likely closed and dropped from memory.
     SendError,
@@ -48,7 +48,7 @@ impl core::fmt::Display for ClientError {
 impl_sourceless_error!(ClientError);
 
 /// Errors occurring when the client is fetching blocks from the node.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FetchBlockError {
     /// The channel to the node was likely closed and dropped from memory.
     /// This implies the node is not running.
@@ -95,7 +95,7 @@ impl core::fmt::Display for FetchBlockError {
 impl_sourceless_error!(FetchBlockError);
 
 /// Errors when constructing transaction packages.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackageError {
     /// Packages may not include more than two transactions and must include at least one
     /// transaction.

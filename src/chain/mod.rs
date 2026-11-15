@@ -27,7 +27,7 @@ use crate::HashCheckpoint;
 const MAX_PREV_STOP_HASHES: usize = 3;
 
 /// A block header with associated height.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IndexedHeader {
     /// The height in the blockchain for this header.
     pub height: u32,
@@ -73,7 +73,7 @@ pub(crate) enum HeaderSyncEffect {
 }
 
 /// Changes applied to the chain of block headers.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BlockHeaderChanges {
     /// A block was connected to the tip of the chain.
     Connected(IndexedHeader),
@@ -89,7 +89,7 @@ pub enum BlockHeaderChanges {
 }
 
 /// A previous chain state to start the sync from.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChainState {
     /// A summary of the chain state. The vector of headers should ideally be contiguous.
     Snapshot(Vec<IndexedHeader>),

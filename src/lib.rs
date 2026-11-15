@@ -98,7 +98,7 @@ pub use bitcoin::{
 pub extern crate tokio;
 
 /// A Bitcoin [`Block`] with associated height.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexedBlock {
     /// The height or index in the chain.
     pub height: u32,
@@ -113,7 +113,7 @@ impl IndexedBlock {
 }
 
 /// The type of filter to make a request for.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[non_exhaustive]
 pub enum FilterType {
     #[default]
@@ -201,7 +201,7 @@ impl std::cmp::Ord for IndexedFilter {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum TrustedPeerInner {
     Addr(AddrV2),
     Hostname(String),
@@ -237,7 +237,7 @@ impl From<AddrV2> for TrustedPeerInner {
 /// // Or from a hostname — resolution happens at connection time.
 /// let trusted = TrustedPeer::from_hostname("bitcoind.svc.local", 8333);
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TrustedPeer {
     // The address or hostname of the remote node to connect to.
     address: TrustedPeerInner,
@@ -337,7 +337,7 @@ impl From<SocketAddr> for TrustedPeer {
 }
 
 /// Route network traffic through a Socks5 proxy, typically used by a Tor daemon.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Socks5Proxy(SocketAddr);
 
 impl Socks5Proxy {
@@ -484,7 +484,7 @@ impl Dialog {
 }
 
 /// A package is a set of dependent transactions to submit to the mempool.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Package {
     parent: Transaction,
     child: Option<Transaction>,
@@ -588,14 +588,14 @@ impl From<Transaction> for Package {
 }
 
 /// Instruct the node to watch for unconfirmed transactions with a certain criteria.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GossipMonitorRequest {
     scripts: HashSet<ScriptBuf>,
     txins: HashSet<OutPoint>,
 }
 
 /// Build a new [`GossipMonitorRequest`].
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GossipMonitorRequestBuilder {
     scripts: HashSet<ScriptBuf>,
     txins: HashSet<OutPoint>,

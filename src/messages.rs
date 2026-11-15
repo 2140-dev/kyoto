@@ -13,7 +13,7 @@ use crate::{BlockType, GossipMonitorRequest, IndexedFilter, Package};
 use super::error::FetchBlockError;
 
 /// Informational messages emitted by a node
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Info {
     /// The node was able to successfully complete a version handshake.
     SuccessfulHandshake,
@@ -43,7 +43,7 @@ impl core::fmt::Display for Info {
 }
 
 /// Data and structures useful for a consumer, such as a wallet.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     /// The chain of block headers has been altered in some way.
     ChainUpdate(BlockHeaderChanges),
@@ -54,7 +54,7 @@ pub enum Event {
 }
 
 /// The node has synced to a new tip of the chain.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SyncUpdate {
     // Last known tip of the blockchain
     tip: HashCheckpoint,
@@ -133,7 +133,7 @@ impl<D: Clone, U> ClientRequest<D, U> {
 }
 
 /// Warnings a node may issue while running.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Warning {
     /// The node is looking for connections to peers.
     NeedConnections {

@@ -5,7 +5,7 @@ use bitcoin::{constants::genesis_block, params::Params, BlockHash};
 type Height = u32;
 
 /// A known block hash in the chain of most work.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct HashCheckpoint {
     /// The index of the block hash.
     pub height: Height,
