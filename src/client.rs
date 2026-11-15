@@ -160,7 +160,9 @@ impl Requester {
     ///
     /// # Errors
     ///
-    /// If the node has stopped running.
+    /// - If the node has stopped running.
+    /// - If the block hash is not a member of the chain of most work.
+    /// - If the block is reorganized out of the chain of most work while the request is pending.
     pub async fn get_block(&self, block_hash: BlockHash) -> Result<IndexedBlock, FetchBlockError> {
         let (tx, rx) = tokio::sync::oneshot::channel::<Result<IndexedBlock, FetchBlockError>>();
         let message = ClientRequest::new((block_hash, None), tx);
@@ -175,7 +177,9 @@ impl Requester {
     ///
     /// # Errors
     ///
-    /// If the node has stopped running.
+    /// If the node has stopped running. The receiver resolves to an error if the block hash is
+    /// not a member of the chain of most work, or if the block is reorganized out of the chain of
+    /// most work while the request is pending.
     pub fn request_block(
         &self,
         block_hash: BlockHash,
@@ -194,6 +198,13 @@ impl Requester {
     /// this value may provide skewed estimates, as averages are more effected by outliers than
     /// medians. For a rudimentary estimation of the fee rate required to enter the next block,
     /// this method may suffice.
+    ///
+    /// # Errors
+    ///
+    /// - If the node has stopped running.
+    /// - If the block hash is not a member of the chain of most work.
+    /// - If the block is reorganized out of the chain of most work while the request is pending.
+    /// - If the block witness data does not match the coinbase commitment.
     pub async fn average_fee_rate(
         &self,
         block_hash: BlockHash,
@@ -351,6 +362,10 @@ impl Requester {
     /// matching the scripts and outpoints provided. Note, duplicate transactions may be sent. On
     /// subsequent subscriptions, this method returns `None`, as there is an exisiting
     /// [`mpsc::Receiver`].
+    ///
+    /// # Errors
+    ///
+    /// If the node has stopped running.
     pub async fn subscribe_to_gossip(
         &self,
         req: GossipMonitorRequest,
@@ -364,6 +379,10 @@ impl Requester {
     }
 
     /// Unsubscribe from all transaction gossip.
+    ///
+    /// # Errors
+    ///
+    /// If the node has stopped running.
     pub fn unsubscribe_from_gossip(&self) -> Result<(), ClientError> {
         self.ntx
             .send(ClientMessage::UnsubscribeGossip)
