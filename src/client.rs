@@ -121,7 +121,7 @@ impl Requester {
     ///
     /// # Returns
     ///
-    /// The `Wtxid` of the child or singleton transaction.
+    /// The [`Wtxid`] of the child or singleton transaction.
     ///
     /// # Errors
     ///
@@ -140,7 +140,7 @@ impl Requester {
     /// transactions should have a fee rate at least as high as the maximum fee filter received.
     /// This method returns the maximum fee rate requirement of all connected peers.
     ///
-    /// For more information, refer to BIP133
+    /// For more information, refer to [BIP133](https://github.com/bitcoin/bips/blob/master/bip-0133.mediawiki).
     ///
     /// # Errors
     ///

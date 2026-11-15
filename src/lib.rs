@@ -416,7 +416,7 @@ impl Default for Config {
 ///
 /// This is **not** a generic DNS implementation. It is specifically tailored to query and parse DNS for Bitcoin seeders.
 /// Iternally, three queries will be made with varying filters for the requested service flags.
-/// Similar to [`lookup_host`](tokio::net::lookup_host), this has no guarantee to return any `IpAddr`.
+/// Similar to [`lookup_host`](tokio::net::lookup_host), this has no guarantee to return any [`IpAddr`].
 ///
 /// # Example usage
 ///
