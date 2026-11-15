@@ -35,18 +35,6 @@ pub struct IndexedHeader {
     pub header: Header,
 }
 
-impl std::cmp::PartialOrd for IndexedHeader {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl std::cmp::Ord for IndexedHeader {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.height.cmp(&other.height)
-    }
-}
-
 impl IndexedHeader {
     pub(crate) fn new(height: u32, header: Header) -> Self {
         Self { height, header }

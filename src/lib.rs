@@ -189,18 +189,6 @@ impl IndexedFilter {
     }
 }
 
-impl std::cmp::PartialOrd for IndexedFilter {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl std::cmp::Ord for IndexedFilter {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.height.cmp(&other.height)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum TrustedPeerInner {
     Addr(AddrV2),

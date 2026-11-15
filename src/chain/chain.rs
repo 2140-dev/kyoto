@@ -112,8 +112,8 @@ impl Chain {
                     mut disconnected,
                 } => {
                     crate::debug!("Valid reorganization found");
-                    accepted.sort();
-                    disconnected.sort();
+                    accepted.sort_by_key(|header| header.height);
+                    disconnected.sort_by_key(|header| header.height);
                     reorgs = disconnected
                         .clone()
                         .into_iter()
