@@ -394,9 +394,3 @@ impl Requester {
         self.ntx.send(ClientMessage::NoOp).is_ok()
     }
 }
-
-impl<T> From<mpsc::error::SendError<T>> for ClientError {
-    fn from(_: mpsc::error::SendError<T>) -> Self {
-        ClientError::Send
-    }
-}
