@@ -248,9 +248,12 @@ impl Filter {
         self.block_hash
     }
 
-    pub fn contains_any<'a>(&'a self, scripts: impl Iterator<Item = &'a ScriptBuf>) -> bool {
+    pub fn contains_any<'a>(&'a self, scripts: impl IntoIterator<Item = &'a ScriptBuf>) -> bool {
         self.block_filter
-            .match_any(&self.block_hash, scripts.map(|script| script.to_bytes()))
+            .match_any(
+                &self.block_hash,
+                scripts.into_iter().map(|script| script.to_bytes()),
+            )
             .expect("vec reader is infallible")
     }
 

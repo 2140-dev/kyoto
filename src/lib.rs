@@ -169,7 +169,7 @@ impl IndexedFilter {
     }
 
     /// Does the filter contain a positive match for any of the provided scripts
-    pub fn contains_any<'a>(&'a self, scripts: impl Iterator<Item = &'a ScriptBuf>) -> bool {
+    pub fn contains_any<'a>(&'a self, scripts: impl IntoIterator<Item = &'a ScriptBuf>) -> bool {
         self.filter.contains_any(scripts)
     }
 
