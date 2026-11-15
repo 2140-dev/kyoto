@@ -120,3 +120,5 @@ impl core::fmt::Display for PackageError {
         }
     }
 }
+
+impl_sourceless_error!(PackageError);
