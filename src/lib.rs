@@ -90,14 +90,14 @@ pub use {
     crate::chain::ChainState,
     crate::client::{Client, EventReceiver, Requester},
     crate::error::{ClientError, NodeError},
-    crate::messages::{Event, Info, RejectPayload, SyncUpdate, Warning},
+    crate::messages::{Event, Info, SyncUpdate, Warning},
     crate::node::Node,
 };
 
 #[doc(inline)]
 pub use bitcoin::{
-    bip158::BlockFilter, block::Header, p2p::address::AddrV2, p2p::message_network::RejectReason,
-    p2p::ServiceFlags, Block, BlockHash, FeeRate, Network, ScriptBuf, Transaction, Wtxid,
+    bip158::BlockFilter, block::Header, p2p::address::AddrV2, p2p::ServiceFlags, Block, BlockHash,
+    FeeRate, Network, ScriptBuf, Transaction, Wtxid,
 };
 
 pub extern crate tokio;

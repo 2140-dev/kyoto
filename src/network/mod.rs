@@ -206,7 +206,6 @@ struct MessageState {
     general_timeout: Duration,
     version_handshake: VersionHandshakeState,
     verack: VerackState,
-    sent_txs: HashSet<Wtxid>,
     announced_txs: HashSet<Wtxid>,
     announced_input_txs: HashSet<Txid>,
     timed_message_state: HashMap<TimeSensitiveId, Instant>,
@@ -220,7 +219,6 @@ impl MessageState {
             general_timeout,
             version_handshake: Default::default(),
             verack: Default::default(),
-            sent_txs: Default::default(),
             announced_txs: Default::default(),
             announced_input_txs: Default::default(),
             timed_message_state: Default::default(),
@@ -248,7 +246,6 @@ impl MessageState {
     }
 
     fn sent_tx(&mut self, transaction: &Transaction) {
-        self.sent_txs.insert(transaction.compute_wtxid());
         self.announced_input_txs.extend(
             transaction
                 .input
@@ -266,10 +263,6 @@ impl MessageState {
             TxIdentifier::Legacy(txid) => self.announced_input_txs.contains(&txid),
             TxIdentifier::Witness(wtxid) => self.announced_txs.contains(&wtxid),
         }
-    }
-
-    fn unknown_rejection(&mut self, wtxid: Wtxid) -> bool {
-        !self.sent_txs.remove(&wtxid)
     }
 
     fn unresponsive(&self) -> bool {
@@ -627,7 +620,7 @@ impl AddressBook {
 mod tests {
     use std::time::Duration;
 
-    use bitcoin::{consensus::deserialize, hashes::Hash, BlockHash, Transaction};
+    use bitcoin::{hashes::Hash, BlockHash};
 
     use crate::network::{LastBlockMonitor, MessageState, PingState};
 
@@ -660,16 +653,6 @@ mod tests {
         assert!(!messsage_state.verack.both_acks());
         messsage_state.verack.sent_ack();
         assert!(messsage_state.verack.both_acks());
-    }
-
-    #[test]
-    fn test_tx_reject_state() {
-        let transaction: Transaction = deserialize(&hex::decode("0200000000010158e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd7501000000171600145f275f436b09a8cc9a2eb2a2f528485c68a56323feffffff02d8231f1b0100000017a914aed962d6654f9a2b36608eb9d64d2b260db4f1118700c2eb0b0000000017a914b7f5faf40e3d40a5a459b1db3535f2b72fa921e88702483045022100a22edcc6e5bc511af4cc4ae0de0fcd75c7e04d8c1c3a8aa9d820ed4b967384ec02200642963597b9b1bc22c75e9f3e117284a962188bf5e8a74c895089046a20ad770121035509a48eb623e10aace8bfd0212fdb8a8e5af3c94b0b133b95e114cab89e4f7965000000").unwrap()).unwrap();
-        let wtxid = transaction.compute_wtxid();
-        let mut message_state = MessageState::new(Duration::from_secs(2));
-        message_state.sent_tx(&transaction);
-        assert!(!message_state.unknown_rejection(wtxid));
-        assert!(message_state.unknown_rejection(wtxid));
     }
 
     #[tokio::test(start_paused = true)]

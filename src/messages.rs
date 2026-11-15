@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use bitcoin::p2p::address::AddrV2;
 use bitcoin::p2p::ServiceFlags;
 use bitcoin::Transaction;
-use bitcoin::{block::Header, p2p::message_network::RejectReason, BlockHash, FeeRate, Wtxid};
+use bitcoin::{block::Header, BlockHash, FeeRate, Wtxid};
 use tokio::sync::mpsc::Receiver;
 
 use crate::chain::{BlockHeaderChanges, IndexedHeader};
@@ -81,15 +81,6 @@ impl SyncUpdate {
     }
 }
 
-/// An attempt to broadcast a transaction failed.
-#[derive(Debug, Clone, Copy)]
-pub struct RejectPayload {
-    /// An enumeration of the reason for the transaction failure. If none is provided, the message could not be sent over the wire.
-    pub reason: Option<RejectReason>,
-    /// The transaction that was rejected or failed to broadcast.
-    pub wtxid: Wtxid,
-}
-
 /// Commands to issue a node.
 #[derive(Debug)]
 pub(crate) enum ClientMessage {
@@ -161,11 +152,6 @@ pub enum Warning {
     PotentialStaleTip,
     /// A peer sent us a peer-to-peer message the node did not request.
     UnsolicitedMessage,
-    /// A transaction got rejected, likely for being an insufficient fee or non-standard transaction.
-    TransactionRejected {
-        /// The transaction ID and reject reason, if it exists.
-        payload: RejectPayload,
-    },
     /// The peer sent us a potential fork.
     EvaluatingFork,
     /// An unexpected error occurred processing a peer-to-peer message.
@@ -200,9 +186,6 @@ impl core::fmt::Display for Warning {
                     f,
                     "The node has been running for a long duration without receiving new blocks."
                 )
-            }
-            Warning::TransactionRejected { payload } => {
-                write!(f, "A transaction got rejected: WTXID {}", payload.wtxid)
             }
             Warning::EvaluatingFork => write!(f, "Peer sent us a potential fork."),
             Warning::UnexpectedSyncError { warning } => {
