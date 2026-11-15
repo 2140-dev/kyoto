@@ -174,7 +174,7 @@ impl IndexedFilter {
     }
 
     /// Consume the index and get underlying block filter.
-    pub fn block_filter(self) -> BlockFilter {
+    pub fn into_block_filter(self) -> BlockFilter {
         self.filter.into_filter()
     }
 
