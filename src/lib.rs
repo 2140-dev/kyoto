@@ -26,18 +26,13 @@
 //!     tokio::task::spawn(async move { node.run().await });
 //!     // Split the client into components that send messages and listen to messages
 //!     let Client { requester, info_rx: _, warn_rx: _, mut event_rx } = client;
-//!     loop {
-//!         if let Some(event) = event_rx.recv().await {
-//!             match event {
-//!                 Event::FiltersSynced(_) => {
-//!                     tracing::info!("Sync complete!");
-//!                     break;
-//!                 },
-//!                 _ => (),
-//!             }
+//!     while let Some(event) = event_rx.recv().await {
+//!         if let Event::FiltersSynced(_) = event {
+//!             tracing::info!("Sync complete!");
+//!             break;
 //!         }
 //!     }
-//!     requester.shutdown();
+//!     let _ = requester.shutdown();
 //! }
 //! ```
 
