@@ -111,7 +111,7 @@ impl Requester {
     pub fn shutdown(&self) -> Result<(), ClientError> {
         self.ntx
             .send(ClientMessage::Shutdown)
-            .map_err(|_| ClientError::SendError)
+            .map_err(|_| ClientError::Send)
     }
 
     /// Submit a package of transactions to the network, returning when transaction data was sent
@@ -132,8 +132,8 @@ impl Requester {
         let client_request = ClientRequest::new(package, tx);
         self.ntx
             .send(ClientMessage::Broadcast(client_request))
-            .map_err(|_| ClientError::SendError)?;
-        rx.await.map_err(|_| ClientError::RecvError)
+            .map_err(|_| ClientError::Send)?;
+        rx.await.map_err(|_| ClientError::Recv)
     }
 
     /// A connection has a minimum transaction fee requirement to enter its mempool. For proper transaction propagation,
@@ -150,8 +150,8 @@ impl Requester {
         let request = ClientRequest::new((), tx);
         self.ntx
             .send(ClientMessage::GetBroadcastMinFeeRate(request))
-            .map_err(|_| ClientError::SendError)?;
-        rx.await.map_err(|_| ClientError::RecvError)
+            .map_err(|_| ClientError::Send)?;
+        rx.await.map_err(|_| ClientError::Recv)
     }
 
     /// Request a block be fetched. Note that this method will request a block
@@ -168,8 +168,8 @@ impl Requester {
         let message = ClientRequest::new((block_hash, None), tx);
         self.ntx
             .send(ClientMessage::GetBlock(message))
-            .map_err(|_| FetchBlockError::SendError)?;
-        rx.await.map_err(|_| FetchBlockError::RecvError)?
+            .map_err(|_| FetchBlockError::Send)?;
+        rx.await.map_err(|_| FetchBlockError::Recv)?
     }
 
     /// Request a block be fetched and receive a [`tokio::sync::oneshot::Receiver`]
@@ -188,7 +188,7 @@ impl Requester {
         let message = ClientRequest::new((block_hash, None), tx);
         self.ntx
             .send(ClientMessage::GetBlock(message))
-            .map_err(|_| FetchBlockError::SendError)?;
+            .map_err(|_| FetchBlockError::Send)?;
         Ok(rx)
     }
 
@@ -213,8 +213,8 @@ impl Requester {
         let message = ClientRequest::new((block_hash, Some(BlockType::Witness)), tx);
         self.ntx
             .send(ClientMessage::GetBlock(message))
-            .map_err(|_| FetchBlockError::SendError)?;
-        let indexed_block = rx.await.map_err(|_| FetchBlockError::RecvError)??;
+            .map_err(|_| FetchBlockError::Send)?;
+        let indexed_block = rx.await.map_err(|_| FetchBlockError::Recv)??;
         if !indexed_block.block.check_witness_commitment() {
             return Err(FetchBlockError::InvalidWitnessCommitment);
         }
@@ -244,8 +244,8 @@ impl Requester {
         let request = ClientRequest::new((), tx);
         self.ntx
             .send(ClientMessage::GetPeerInfo(request))
-            .map_err(|_| ClientError::SendError)?;
-        rx.await.map_err(|_| ClientError::RecvError)
+            .map_err(|_| ClientError::Send)?;
+        rx.await.map_err(|_| ClientError::Recv)
     }
 
     /// Starting after the configured checkpoint, re-emit all block filters.
@@ -256,7 +256,7 @@ impl Requester {
     pub fn rescan(&self) -> Result<(), ClientError> {
         self.ntx
             .send(ClientMessage::Rescan(None))
-            .map_err(|_| ClientError::SendError)
+            .map_err(|_| ClientError::Send)
     }
 
     /// Re-emit block filters _after_ the specified height.
@@ -267,7 +267,7 @@ impl Requester {
     pub fn rescan_from(&self, height: u32) -> Result<(), ClientError> {
         self.ntx
             .send(ClientMessage::Rescan(Some(height)))
-            .map_err(|_| ClientError::SendError)
+            .map_err(|_| ClientError::Send)
     }
 
     /// Add another known peer to connect to.
@@ -278,7 +278,7 @@ impl Requester {
     pub fn add_peer(&self, peer: impl Into<TrustedPeer>) -> Result<(), ClientError> {
         self.ntx
             .send(ClientMessage::AddPeer(peer.into()))
-            .map_err(|_| ClientError::SendError)
+            .map_err(|_| ClientError::Send)
     }
 
     /// The height and hash of the block in the chain of most work.
@@ -291,8 +291,8 @@ impl Requester {
         let request = ClientRequest::new((), tx);
         self.ntx
             .send(ClientMessage::BestBlock(request))
-            .map_err(|_| ClientError::SendError)?;
-        rx.await.map_err(|_| ClientError::RecvError)
+            .map_err(|_| ClientError::Send)?;
+        rx.await.map_err(|_| ClientError::Recv)
     }
 
     /// Look up a header at a specific height in the locally synced chain of most work.
@@ -306,8 +306,8 @@ impl Requester {
         let request = ClientRequest::new(height, tx);
         self.ntx
             .send(ClientMessage::GetHeader(request))
-            .map_err(|_| ClientError::SendError)?;
-        rx.await.map_err(|_| ClientError::RecvError)
+            .map_err(|_| ClientError::Send)?;
+        rx.await.map_err(|_| ClientError::Recv)
     }
 
     /// Look up the height of a block hash in the locally synced chain of most work.
@@ -321,8 +321,8 @@ impl Requester {
         let request = ClientRequest::new(hash, tx);
         self.ntx
             .send(ClientMessage::HeightOfHash(request))
-            .map_err(|_| ClientError::SendError)?;
-        rx.await.map_err(|_| ClientError::RecvError)
+            .map_err(|_| ClientError::Send)?;
+        rx.await.map_err(|_| ClientError::Recv)
     }
 
     /// Subscribe to transaction gossip that involves scripts or outpoints of interest. This
@@ -374,8 +374,8 @@ impl Requester {
         let request = ClientRequest::new(req, tx);
         self.ntx
             .send(ClientMessage::SubscribeGossip(request))
-            .map_err(|_| ClientError::SendError)?;
-        rx.await.map_err(|_| ClientError::RecvError)
+            .map_err(|_| ClientError::Send)?;
+        rx.await.map_err(|_| ClientError::Recv)
     }
 
     /// Unsubscribe from all transaction gossip.
@@ -386,7 +386,7 @@ impl Requester {
     pub fn unsubscribe_from_gossip(&self) -> Result<(), ClientError> {
         self.ntx
             .send(ClientMessage::UnsubscribeGossip)
-            .map_err(|_| ClientError::SendError)
+            .map_err(|_| ClientError::Send)
     }
 
     /// Check if the node is running.
@@ -397,6 +397,6 @@ impl Requester {
 
 impl<T> From<mpsc::error::SendError<T>> for ClientError {
     fn from(_: mpsc::error::SendError<T>) -> Self {
-        ClientError::SendError
+        ClientError::Send
     }
 }

@@ -28,18 +28,18 @@ impl_sourceless_error!(NodeError);
 #[non_exhaustive]
 pub enum ClientError {
     /// The channel to the node was likely closed and dropped from memory.
-    SendError,
+    Send,
     /// A channel was dropped before sending its value back.
-    RecvError,
+    Recv,
 }
 
 impl core::fmt::Display for ClientError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ClientError::SendError => {
+            ClientError::Send => {
                 write!(f, "the receiver of this message was dropped from memory")
             }
-            ClientError::RecvError => {
+            ClientError::Recv => {
                 write!(f, "the sender of data was dropped from memory")
             }
         }
@@ -54,9 +54,9 @@ impl_sourceless_error!(ClientError);
 pub enum FetchBlockError {
     /// The channel to the node was likely closed and dropped from memory.
     /// This implies the node is not running.
-    SendError,
+    Send,
     /// The channel to the client was likely closed by the node and dropped from memory.
-    RecvError,
+    Recv,
     /// The hash is not a member of the chain of most work.
     UnknownHash,
     /// The witness data of the block does not match the commitment in the coinbase.
@@ -68,10 +68,10 @@ pub enum FetchBlockError {
 impl core::fmt::Display for FetchBlockError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FetchBlockError::SendError => {
+            FetchBlockError::Send => {
                 write!(f, "the receiver of this message was dropped from memory")
             }
-            FetchBlockError::RecvError => write!(
+            FetchBlockError::Recv => write!(
                 f,
                 "the channel to the client was likely closed by the node and dropped from memory"
             ),
