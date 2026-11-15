@@ -60,7 +60,7 @@ use chain::Filter;
 
 use std::{
     collections::HashSet,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -320,6 +320,30 @@ impl From<IpAddr> for TrustedPeer {
 
 impl From<SocketAddr> for TrustedPeer {
     fn from(value: SocketAddr) -> Self {
+        TrustedPeer::from_socket_addr(value)
+    }
+}
+
+impl From<Ipv4Addr> for TrustedPeer {
+    fn from(value: Ipv4Addr) -> Self {
+        TrustedPeer::from_ip(value)
+    }
+}
+
+impl From<Ipv6Addr> for TrustedPeer {
+    fn from(value: Ipv6Addr) -> Self {
+        TrustedPeer::from_ip(value)
+    }
+}
+
+impl From<SocketAddrV4> for TrustedPeer {
+    fn from(value: SocketAddrV4) -> Self {
+        TrustedPeer::from_socket_addr(value)
+    }
+}
+
+impl From<SocketAddrV6> for TrustedPeer {
+    fn from(value: SocketAddrV6) -> Self {
         TrustedPeer::from_socket_addr(value)
     }
 }
