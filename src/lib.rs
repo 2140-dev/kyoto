@@ -75,8 +75,6 @@ pub use chain::checkpoints::HashCheckpoint;
 pub use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 
-#[doc(inline)]
-pub use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::mpsc::UnboundedSender;
 
 #[doc(inline)]
