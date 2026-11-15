@@ -37,10 +37,10 @@ impl core::fmt::Display for ClientError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ClientError::SendError => {
-                write!(f, "the receiver of this message was dropped from memory.")
+                write!(f, "the receiver of this message was dropped from memory")
             }
             ClientError::RecvError => {
-                write!(f, "the sender of data was dropped from memory.")
+                write!(f, "the sender of data was dropped from memory")
             }
         }
     }
@@ -69,25 +69,25 @@ impl core::fmt::Display for FetchBlockError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             FetchBlockError::SendError => {
-                write!(f, "the receiver of this message was dropped from memory.")
+                write!(f, "the receiver of this message was dropped from memory")
             }
             FetchBlockError::RecvError => write!(
                 f,
-                "the channel to the client was likely closed by the node and dropped from memory."
+                "the channel to the client was likely closed by the node and dropped from memory"
             ),
             FetchBlockError::UnknownHash => {
-                write!(f, "the hash is not a member of the chain of most work.")
+                write!(f, "the hash is not a member of the chain of most work")
             }
             FetchBlockError::InvalidWitnessCommitment => {
                 write!(
                     f,
-                    "the block witness data does not match the coinbase commitment."
+                    "the block witness data does not match the coinbase commitment"
                 )
             }
             FetchBlockError::Reorged(hash) => {
                 write!(
                     f,
-                    "block {hash} was reorganized out of the chain of most work while pending."
+                    "block {hash} was reorganized out of the chain of most work while pending"
                 )
             }
         }
@@ -118,7 +118,7 @@ impl core::fmt::Display for PackageError {
                 )
             }
             PackageError::UnrelatedTransactions => {
-                write!(f, "packages must have dependent inputs and outputs.")
+                write!(f, "packages must have dependent inputs and outputs")
             }
         }
     }

@@ -20,10 +20,10 @@ impl core::fmt::Display for ReaderError {
         match self {
             ReaderError::Io(err) => write!(f, "reading bytes off the stream failed: {err}"),
             ReaderError::InvalidDeserialization => {
-                write!(f, "the message could not be properly deserialized.")
+                write!(f, "the message could not be properly deserialized")
             }
-            ReaderError::MessageTooLarge => write!(f, "OOM protection."),
-            ReaderError::ChannelClosed => write!(f, "sending over the channel failed."),
+            ReaderError::MessageTooLarge => write!(f, "OOM protection"),
+            ReaderError::ChannelClosed => write!(f, "sending over the channel failed"),
             ReaderError::DecryptionFailed(err) => write!(f, "decrypting a message failed: {err}"),
         }
     }
@@ -87,24 +87,23 @@ impl core::fmt::Display for PeerError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             PeerError::ConnectionFailed => {
-                write!(f, "the peer's TCP port was closed or we could not connect.")
+                write!(f, "the peer's TCP port was closed or we could not connect")
             }
             PeerError::Io(err) => write!(f, "a message could not be written to the peer: {err}"),
-            PeerError::ChannelClosed => write!(
-                f,
-                "experienced an error sending a message over the channel."
-            ),
+            PeerError::ChannelClosed => {
+                write!(f, "experienced an error sending a message over the channel")
+            }
             PeerError::DisconnectCommand => {
-                write!(f, "the main thread advised this peer to disconnect.")
+                write!(f, "the main thread advised this peer to disconnect")
             }
             PeerError::UnreachableSocketAddr => {
-                write!(f, "cannot make use of provided p2p address.")
+                write!(f, "cannot make use of provided p2p address")
             }
             PeerError::Serialization(err) => {
                 write!(f, "serializing a message into bytes failed: {err}")
             }
             PeerError::HandshakeFailed => {
-                write!(f, "an attempted V2 transport handshake failed.")
+                write!(f, "an attempted V2 transport handshake failed")
             }
             PeerError::Encryption(err) => {
                 write!(f, "encrypting a serialized message failed: {err}")
@@ -154,12 +153,12 @@ pub(crate) enum Socks5Error {
 impl core::fmt::Display for Socks5Error {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Socks5Error::WrongVersion => write!(f, "server responded with an unsupported version."),
-            Socks5Error::AuthRequired => write!(f, "server requires authentication."),
-            Socks5Error::ConnectionTimeout => write!(f, "connection to server timed out."),
+            Socks5Error::WrongVersion => write!(f, "server responded with an unsupported version"),
+            Socks5Error::AuthRequired => write!(f, "server requires authentication"),
+            Socks5Error::ConnectionTimeout => write!(f, "connection to server timed out"),
             Socks5Error::ConnectionFailed => write!(
                 f,
-                "the server could not connect to the requested destination."
+                "the server could not connect to the requested destination"
             ),
             Socks5Error::Io(err) => write!(f, "socks5 io failed unexpectedly: {err}"),
         }
