@@ -56,10 +56,10 @@ pub enum Event {
 /// The node has synced to a new tip of the chain.
 #[derive(Debug, Clone)]
 pub struct SyncUpdate {
-    /// Last known tip of the blockchain
-    pub tip: HashCheckpoint,
-    /// Ten recent headers ending with the tip
-    pub recent_history: BTreeMap<u32, Header>,
+    // Last known tip of the blockchain
+    tip: HashCheckpoint,
+    // Ten recent headers ending with the tip
+    recent_history: BTreeMap<u32, Header>,
 }
 
 impl SyncUpdate {
