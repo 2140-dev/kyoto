@@ -55,8 +55,8 @@ async fn main() {
     // Continually listen for events until the node is synced to its peers.
     loop {
         tokio::select! {
-            event = event_rx.recv() => {
-                if let Some(Event::FiltersSynced(update)) = event {
+            Some(event) = event_rx.recv() => {
+                if let Event::FiltersSynced(update) = event {
                     tracing::info!("Chain tip: {}",update.tip().hash);
                     // Request information from the node
                     let fee = requester.broadcast_min_feerate().await.unwrap();
@@ -68,30 +68,28 @@ async fn main() {
                     break;
                 }
             }
-            info = info_rx.recv() => {
+            Some(info) = info_rx.recv() => {
                 match info {
-                    Some(Info::NewChainHeight(height)) => {
+                    Info::NewChainHeight(height) => {
                         chain_height = height;
                         tracing::info!("Header height: {height}");
                     }
-                    Some(Info::CFHeadersAdded(height)) => {
+                    Info::CFHeadersAdded(height) => {
                         let percent = percent_complete(start_height, height, chain_height);
                         tracing::info!("Filter headers: {percent:.2}% ({height}/{chain_height})");
                     }
-                    Some(Info::FilterAdded(height)) if height % 2_000 == 0 => {
+                    Info::FilterAdded(height) if height % 2_000 == 0 => {
                         let percent = percent_complete(start_height, height, chain_height);
                         tracing::info!("Filters: {percent:.2}% ({height}/{chain_height})");
                     }
-                    Some(Info::FilterAdded(_)) => (),
-                    Some(info) => tracing::info!("{info}"),
-                    None => (),
+                    Info::FilterAdded(_) => (),
+                    info => tracing::info!("{info}"),
                 }
             }
-            warn = warn_rx.recv() => {
-                if let Some(warn) = warn {
-                    tracing::warn!("{warn}");
-                }
+            Some(warn) = warn_rx.recv() => {
+                tracing::warn!("{warn}");
             }
+            else => break,
         }
     }
     let _ = requester.shutdown();
