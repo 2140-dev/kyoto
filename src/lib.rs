@@ -216,11 +216,11 @@ impl From<AddrV2> for TrustedPeerInner {
 ///
 /// let local_host = Ipv4Addr::new(0, 0, 0, 0);
 /// // Or construct a trusted peer directly.
-/// let trusted = TrustedPeer::new(AddrV2::Ipv4(local_host), None, ServiceFlags::P2P_V2);
+/// let trusted = TrustedPeer::with_services(AddrV2::Ipv4(local_host), 8333, ServiceFlags::P2P_V2);
 ///
 /// // Or implicitly with `into`
 /// let local_host = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
-/// let trusted: TrustedPeer = (local_host, None).into();
+/// let trusted: TrustedPeer = (local_host, 8333).into();
 ///
 /// // Or from a hostname — resolution happens at connection time.
 /// let trusted = TrustedPeer::from_hostname("bitcoind.svc.local", 8333);
@@ -237,10 +237,15 @@ pub struct TrustedPeer {
 
 impl TrustedPeer {
     /// Create a new trusted peer.
-    pub fn new(address: impl Into<AddrV2>, port: Option<u16>, services: ServiceFlags) -> Self {
+    pub fn new(address: impl Into<AddrV2>, port: u16) -> Self {
+        Self::with_services(address, port, ServiceFlags::NONE)
+    }
+
+    /// Create a new trusted peer that is known to offer the given services.
+    pub fn with_services(address: impl Into<AddrV2>, port: u16, services: ServiceFlags) -> Self {
         Self {
             address: TrustedPeerInner::Addr(address.into()),
-            port,
+            port: Some(port),
             known_services: services,
         }
     }
@@ -302,13 +307,9 @@ impl TrustedPeer {
     }
 }
 
-impl From<(IpAddr, Option<u16>)> for TrustedPeer {
-    fn from(value: (IpAddr, Option<u16>)) -> Self {
-        let address = match value.0 {
-            IpAddr::V4(ip) => AddrV2::Ipv4(ip),
-            IpAddr::V6(ip) => AddrV2::Ipv6(ip),
-        };
-        TrustedPeer::new(address, value.1, ServiceFlags::NONE)
+impl From<(IpAddr, u16)> for TrustedPeer {
+    fn from(value: (IpAddr, u16)) -> Self {
+        TrustedPeer::from_socket_addr(SocketAddr::new(value.0, value.1))
     }
 }
 

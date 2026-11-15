@@ -58,7 +58,7 @@ fn new_node(
     _tempdir_path: PathBuf,
     chain_state: ChainState,
 ) -> (Node, Client) {
-    let host = (IpAddr::V4(*socket_addr.ip()), Some(socket_addr.port()));
+    let host = (IpAddr::V4(*socket_addr.ip()), socket_addr.port());
     let mut trusted: TrustedPeer = host.into();
     trusted.set_services(ServiceFlags::P2P_V2);
     let builder = bip157::builder::Builder::new(bitcoin::Network::Regtest);
@@ -854,7 +854,7 @@ async fn gossip_subscription() {
     let miner = rpc.new_address().unwrap();
     mine_blocks(rpc, &miner, 110, 5).await;
 
-    let host = (IpAddr::V4(*socket_addr.ip()), Some(socket_addr.port()));
+    let host = (IpAddr::V4(*socket_addr.ip()), socket_addr.port());
     let builder = bip157::builder::Builder::new(bitcoin::Network::Regtest)
         .chain_state(ChainState::Checkpoint(HashCheckpoint::from_genesis(
             bitcoin::Network::Regtest,
@@ -927,7 +927,7 @@ async fn whitelist_only_sync() {
     let miner = rpc.new_address().unwrap();
     mine_blocks(rpc, &miner, 10, 2).await;
     let best = best_hash(rpc);
-    let host = (IpAddr::V4(*socket_addr.ip()), Some(socket_addr.port()));
+    let host = (IpAddr::V4(*socket_addr.ip()), socket_addr.port());
     let builder = bip157::builder::Builder::new(bitcoin::Network::Regtest)
         .chain_state(ChainState::Checkpoint(HashCheckpoint::from_genesis(
             bitcoin::Network::Regtest,
@@ -994,7 +994,7 @@ async fn headers_only_sync_then_rescan() {
     let miner = rpc.new_address().unwrap();
     mine_blocks(rpc, &miner, 10, 2).await;
     let best = best_hash(rpc);
-    let host = (IpAddr::V4(*socket_addr.ip()), Some(socket_addr.port()));
+    let host = (IpAddr::V4(*socket_addr.ip()), socket_addr.port());
     let builder = bip157::builder::Builder::new(bitcoin::Network::Regtest)
         .chain_state(ChainState::Checkpoint(HashCheckpoint::from_genesis(
             bitcoin::Network::Regtest,
