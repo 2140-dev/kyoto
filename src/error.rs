@@ -25,6 +25,7 @@ impl_sourceless_error!(NodeError);
 
 /// Errors occurring when the client is talking to the node.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ClientError {
     /// The channel to the node was likely closed and dropped from memory.
     SendError,
@@ -49,6 +50,7 @@ impl_sourceless_error!(ClientError);
 
 /// Errors occurring when the client is fetching blocks from the node.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum FetchBlockError {
     /// The channel to the node was likely closed and dropped from memory.
     /// This implies the node is not running.
@@ -96,6 +98,7 @@ impl_sourceless_error!(FetchBlockError);
 
 /// Errors when constructing transaction packages.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PackageError {
     /// Packages may not include more than two transactions and must include at least one
     /// transaction.
