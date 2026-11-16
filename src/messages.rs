@@ -150,15 +150,10 @@ pub enum Warning {
     NoCompactFilters,
     /// The node has been waiting for new `inv` and will find new peers to avoid block withholding.
     PotentialStaleTip,
-    /// A peer sent us a peer-to-peer message the node did not request.
-    UnsolicitedMessage,
     /// The peer sent us a potential fork.
     EvaluatingFork,
-    /// An unexpected error occurred processing a peer-to-peer message.
-    UnexpectedSyncError {
-        /// Additional context as to why block syncing failed.
-        warning: String,
-    },
+    /// A peer sent data that failed validation or that the node did not request.
+    PeerMisbehaved(Misbehavior),
     /// A channel that was supposed to receive a message was dropped.
     ChannelDropped,
 }
@@ -188,17 +183,11 @@ impl core::fmt::Display for Warning {
                 )
             }
             Warning::EvaluatingFork => write!(f, "Peer sent us a potential fork."),
-            Warning::UnexpectedSyncError { warning } => {
-                write!(f, "Error handling a P2P message: {warning}")
+            Warning::PeerMisbehaved(misbehavior) => {
+                write!(f, "A peer misbehaved: {misbehavior}")
             }
             Warning::PeerTimedOut => {
                 write!(f, "A connection to a peer timed out.")
-            }
-            Warning::UnsolicitedMessage => {
-                write!(
-                    f,
-                    "A peer sent us a peer-to-peer message the node did not request."
-                )
             }
             Warning::ChannelDropped => {
                 write!(
@@ -206,6 +195,44 @@ impl core::fmt::Display for Warning {
                     "A channel that was supposed to receive a message was dropped."
                 )
             }
+        }
+    }
+}
+
+/// The ways a peer may send data that fails validation or that the node did not request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Misbehavior {
+    /// The peer sent block headers that failed validation.
+    InvalidHeaders,
+    /// The peer sent compact filter headers that conflict with those of another peer.
+    ConflictingFilterHeaders,
+    /// The peer sent compact filter headers that failed validation.
+    InvalidFilterHeaders,
+    /// The peer sent a compact block filter that failed validation.
+    InvalidFilter,
+    /// The peer sent a block whose header the node does not know.
+    UnknownBlock,
+    /// The peer sent a block with a merkle root that does not match its header.
+    InvalidMerkleRoot,
+    /// The peer sent a peer-to-peer message the node did not request.
+    UnsolicitedMessage,
+}
+
+impl core::fmt::Display for Misbehavior {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Misbehavior::InvalidHeaders => write!(f, "invalid block headers"),
+            Misbehavior::ConflictingFilterHeaders => {
+                write!(f, "compact filter headers conflict with another peer")
+            }
+            Misbehavior::InvalidFilterHeaders => write!(f, "invalid compact filter headers"),
+            Misbehavior::InvalidFilter => write!(f, "invalid compact block filter"),
+            Misbehavior::UnknownBlock => write!(f, "block header is unknown"),
+            Misbehavior::InvalidMerkleRoot => {
+                write!(f, "block merkle root does not match its header")
+            }
+            Misbehavior::UnsolicitedMessage => write!(f, "unsolicited peer-to-peer message"),
         }
     }
 }

@@ -25,6 +25,7 @@ use crate::{
         block_queue::{BlockQueue, ProcessBlockResponse},
         chain::Chain,
         checkpoints::HashCheckpoint,
+        error::{CFHeaderSyncError, CFilterSyncError},
         CFHeaderChanges, ChainState, FilterCheck, HeaderSyncEffect, IndexedHeader,
     },
     error::FetchBlockError,
@@ -39,7 +40,7 @@ use crate::{
 use super::{
     client::{Client, EventReceiver},
     error::NodeError,
-    messages::{ClientMessage, Event, Info, SyncUpdate, Warning},
+    messages::{ClientMessage, Event, Info, Misbehavior, SyncUpdate, Warning},
     Dialog,
 };
 
@@ -537,10 +538,9 @@ impl Node {
                     self.block_queue.remove(&reorgs);
                 }
             },
-            Err(e) => {
-                self.dialog.send_warning(Warning::UnexpectedSyncError {
-                    warning: format!("Unexpected header syncing error: {e}"),
-                });
+            Err(_) => {
+                self.dialog
+                    .send_warning(Warning::PeerMisbehaved(Misbehavior::InvalidHeaders));
                 self.peer_map.ban(peer_id).await;
                 return Some(MainThreadMessage::Disconnect);
             }
@@ -559,16 +559,19 @@ impl Node {
                 CFHeaderChanges::AddedToQueue => None,
                 CFHeaderChanges::Extended => self.next_stateful_message(),
                 CFHeaderChanges::Conflict => {
-                    self.dialog.send_warning(Warning::UnexpectedSyncError {
-                        warning: "Found a conflict while peers are sending filter headers".into(),
-                    });
+                    self.dialog.send_warning(Warning::PeerMisbehaved(
+                        Misbehavior::ConflictingFilterHeaders,
+                    ));
                     Some(MainThreadMessage::Disconnect)
                 }
             },
             Err(e) => {
-                self.dialog.send_warning(Warning::UnexpectedSyncError {
-                    warning: format!("Compact filter header syncing encountered an error: {e}"),
-                });
+                let misbehavior = match e {
+                    CFHeaderSyncError::UnrequestedStophash => Misbehavior::UnsolicitedMessage,
+                    _ => Misbehavior::InvalidFilterHeaders,
+                };
+                self.dialog
+                    .send_warning(Warning::PeerMisbehaved(misbehavior));
                 self.peer_map.ban(peer_id).await;
                 self.peer_map
                     .send_message(peer_id, MainThreadMessage::Disconnect);
@@ -592,9 +595,12 @@ impl Node {
                 None
             }
             Err(e) => {
-                self.dialog.send_warning(Warning::UnexpectedSyncError {
-                    warning: format!("Compact filter syncing encountered an error: {e}"),
-                });
+                let misbehavior = match e {
+                    CFilterSyncError::UnrequestedStophash => Misbehavior::UnsolicitedMessage,
+                    _ => Misbehavior::InvalidFilter,
+                };
+                self.dialog
+                    .send_warning(Warning::PeerMisbehaved(misbehavior));
                 self.peer_map.ban(peer_id).await;
                 Some(MainThreadMessage::Disconnect)
             }
@@ -607,17 +613,15 @@ impl Node {
         let height = match self.chain.header_chain.height_of_hash(block_hash) {
             Some(height) => height,
             None => {
-                self.dialog.send_warning(Warning::UnexpectedSyncError {
-                    warning: "A block received does not have a known hash".into(),
-                });
+                self.dialog
+                    .send_warning(Warning::PeerMisbehaved(Misbehavior::UnknownBlock));
                 self.peer_map.ban(peer_id).await;
                 return Some(MainThreadMessage::Disconnect);
             }
         };
         if !block.check_merkle_root() {
-            self.dialog.send_warning(Warning::UnexpectedSyncError {
-                warning: "A block received does not have a valid merkle root".into(),
-            });
+            self.dialog
+                .send_warning(Warning::PeerMisbehaved(Misbehavior::InvalidMerkleRoot));
             self.peer_map.ban(peer_id).await;
             return Some(MainThreadMessage::Disconnect);
         }
