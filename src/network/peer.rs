@@ -24,7 +24,7 @@ use crate::network::gossip::TransactionCheck;
 use crate::network::RelayPolicy;
 use crate::{
     broadcaster::{BroadcastQueue, TxIdentifier},
-    messages::Warning,
+    messages::{ConnectionFailure, Warning},
     BlockType, Dialog, Info,
 };
 
@@ -105,9 +105,11 @@ impl Peer {
                 let handshake_result =
                     tokio::time::timeout(V2_HANDSHAKE_TIMEOUT, self.try_handshake(writer, reader))
                         .await
-                        .map_err(|_| PeerError::HandshakeFailed)?;
+                        .unwrap_or(Err(PeerError::HandshakeFailed));
                 if handshake_result.is_err() {
-                    self.dialog.send_warning(Warning::CouldNotConnect);
+                    self.dialog.send_warning(Warning::ConnectionFailed(
+                        ConnectionFailure::CouldNotConnect,
+                    ));
                 }
                 let (protocol_reader, encryptor, w) = handshake_result?;
                 writer = w;
@@ -154,11 +156,13 @@ impl Peer {
                     .insert(msg_id, Instant::now());
             }
             if self.message_state.unresponsive() {
-                self.dialog.send_warning(Warning::PeerTimedOut);
+                self.dialog
+                    .send_warning(Warning::ConnectionFailed(ConnectionFailure::TimedOut));
                 return Ok(());
             }
             if self.message_state.filter_rate.slow_peer() {
-                self.dialog.send_warning(Warning::PeerTimedOut);
+                self.dialog
+                    .send_warning(Warning::ConnectionFailed(ConnectionFailure::TimedOut));
                 return Ok(());
             }
             if Instant::now().duration_since(start_time) > self.timeout_config.max_connection_time {
