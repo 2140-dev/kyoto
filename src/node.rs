@@ -40,7 +40,7 @@ use crate::{
 use super::{
     client::{Client, EventReceiver},
     error::NodeError,
-    messages::{ClientMessage, Event, Info, Misbehavior, SyncUpdate, Warning},
+    messages::{ClientMessage, ConnectionFailure, Event, Info, Misbehavior, SyncUpdate, Warning},
     Dialog,
 };
 
@@ -336,13 +336,17 @@ impl Node {
                 .await
                 .ok_or(NodeError::NoReachablePeers)?;
             if self.peer_map.dispatch(address).await.is_err() {
-                self.dialog.send_warning(Warning::CouldNotConnect);
+                self.dialog.send_warning(Warning::ConnectionFailed(
+                    ConnectionFailure::CouldNotConnect,
+                ));
             }
         }
         if self.peer_map.needs_gossip_listener() {
             if let Some(peer) = self.peer_map.next_peer().await {
                 if self.peer_map.dispatch_gossip(peer).await.is_err() {
-                    self.dialog.send_warning(Warning::CouldNotConnect);
+                    self.dialog.send_warning(Warning::ConnectionFailed(
+                        ConnectionFailure::CouldNotConnect,
+                    ));
                 }
             }
         }
@@ -466,6 +470,9 @@ impl Node {
         version_message: VersionMessage,
     ) -> Result<MainThreadMessage, NodeError> {
         if version_message.version < WTXID_VERSION {
+            self.dialog.send_warning(Warning::ConnectionFailed(
+                ConnectionFailure::UnsupportedVersion,
+            ));
             return Ok(MainThreadMessage::Disconnect);
         }
         match self.state {
@@ -474,7 +481,9 @@ impl Node {
                 if !version_message.services.has(ServiceFlags::COMPACT_FILTERS)
                     || !version_message.services.has(ServiceFlags::NETWORK)
                 {
-                    self.dialog.send_warning(Warning::NoCompactFilters);
+                    self.dialog.send_warning(Warning::ConnectionFailed(
+                        ConnectionFailure::NoCompactFilters,
+                    ));
                     return Ok(MainThreadMessage::Disconnect);
                 }
             }

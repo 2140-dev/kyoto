@@ -83,7 +83,7 @@ pub use {
     crate::chain::ChainState,
     crate::client::{Client, EventReceiver, Requester},
     crate::error::{ClientError, NodeError},
-    crate::messages::{Event, Info, Misbehavior, SyncUpdate, Warning},
+    crate::messages::{ConnectionFailure, Event, Info, Misbehavior, SyncUpdate, Warning},
     crate::node::Node,
 };
 

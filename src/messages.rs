@@ -142,12 +142,8 @@ pub enum Warning {
         /// The configured requirement.
         required: usize,
     },
-    /// A connection to a peer timed out.
-    PeerTimedOut,
-    /// The node was unable to connect to a peer in the database.
-    CouldNotConnect,
-    /// A connection was maintained, but the peer does not signal for compact block filers.
-    NoCompactFilters,
+    /// A connection to a peer failed or was dropped.
+    ConnectionFailed(ConnectionFailure),
     /// The node has been waiting for new `inv` and will find new peers to avoid block withholding.
     PotentialStaleTip,
     /// The peer sent us a potential fork.
@@ -170,11 +166,8 @@ impl core::fmt::Display for Warning {
                     "Looking for connections to peers. Connected: {connected}, Required: {required}"
                 )
             }
-            Warning::CouldNotConnect => {
-                write!(f, "An attempted connection failed or timed out.")
-            }
-            Warning::NoCompactFilters => {
-                write!(f, "A connected peer does not serve compact block filters.")
+            Warning::ConnectionFailed(reason) => {
+                write!(f, "A peer connection failed: {reason}")
             }
             Warning::PotentialStaleTip => {
                 write!(
@@ -186,14 +179,40 @@ impl core::fmt::Display for Warning {
             Warning::PeerMisbehaved(misbehavior) => {
                 write!(f, "A peer misbehaved: {misbehavior}")
             }
-            Warning::PeerTimedOut => {
-                write!(f, "A connection to a peer timed out.")
-            }
             Warning::ChannelDropped => {
                 write!(
                     f,
                     "A channel that was supposed to receive a message was dropped."
                 )
+            }
+        }
+    }
+}
+
+/// The reasons a connection to a peer may fail or be dropped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ConnectionFailure {
+    /// The node was unable to establish a connection or complete an encrypted handshake.
+    CouldNotConnect,
+    /// The peer did not respond to a request in time.
+    TimedOut,
+    /// The peer does not serve compact block filters.
+    NoCompactFilters,
+    /// The peer uses a peer-to-peer protocol version the node does not support.
+    UnsupportedVersion,
+}
+
+impl core::fmt::Display for ConnectionFailure {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            ConnectionFailure::CouldNotConnect => write!(f, "could not connect"),
+            ConnectionFailure::TimedOut => write!(f, "peer timed out"),
+            ConnectionFailure::NoCompactFilters => {
+                write!(f, "peer does not serve compact block filters")
+            }
+            ConnectionFailure::UnsupportedVersion => {
+                write!(f, "peer protocol version is not supported")
             }
         }
     }
