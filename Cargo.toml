@@ -19,7 +19,7 @@ bitcoin = { version = "0.32.8", default-features = false, features = [
 bip324 = { version = "0.10.0", default-features = false, features = [
     "tokio",
 ] }
-hashes = { package = "bitcoin_hashes", version = "0.20.0" }
+hashes = { package = "bitcoin_hashes", version = "1.0.0" }
 tokio = { version = "1.19", default-features = false, features = [
     "rt-multi-thread",
     "sync",
