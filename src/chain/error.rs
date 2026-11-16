@@ -17,27 +17,27 @@ impl Display for HeaderSyncError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             HeaderSyncError::HeadersNotConnected => {
-                write!(f, "the headers received do not connect.")
+                write!(f, "the headers received do not connect")
             }
             HeaderSyncError::InvalidHeaderWork => {
-                write!(f, "one or more headers does not match its own PoW target.")
+                write!(f, "one or more headers do not match their own PoW target")
             }
             HeaderSyncError::InvalidHeaderTimes => {
-                write!(f, "one or more headers does not have a valid block time.")
+                write!(f, "one or more headers do not have a valid block time")
             }
             HeaderSyncError::InvalidCheckpoint => {
-                write!(f, "a checkpoint in the chain did not match.")
+                write!(f, "a checkpoint in the chain did not match")
             }
             HeaderSyncError::MiscalculatedDifficulty => {
-                write!(f, "a computed difficulty adjustment did not match.")
+                write!(f, "a computed difficulty adjustment did not match")
             }
             HeaderSyncError::FloatingHeaders => write!(
                 f,
-                "the peer sent us a chain that does not connect to any header of ours."
+                "the peer sent us a chain that does not connect to any header of ours"
             ),
             HeaderSyncError::InvalidBits => write!(
                 f,
-                "the target work does not adhere to basic transition requirements."
+                "the target work does not adhere to basic transition requirements"
             ),
         }
     }
@@ -60,24 +60,24 @@ pub enum CFHeaderSyncError {
 impl core::fmt::Display for CFHeaderSyncError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            CFHeaderSyncError::EmptyMessage => write!(f, "empty headers message."),
+            CFHeaderSyncError::EmptyMessage => write!(f, "empty headers message"),
             CFHeaderSyncError::UnknownStophash => {
-                write!(f, "a stop hash received was not found in our chain.")
+                write!(f, "a stop hash received was not found in our chain")
             }
             CFHeaderSyncError::StopHashMismatch => {
-                write!(f, "the requested and received stop hashes do not match.")
+                write!(f, "the requested and received stop hashes do not match")
             }
             CFHeaderSyncError::UnrequestedStophash => {
-                write!(f, "we did not request this stop hash.")
+                write!(f, "we did not request this stop hash")
             }
-            CFHeaderSyncError::PrevHeaderMismatch => write!(f, "previous filter header mismatch."),
+            CFHeaderSyncError::PrevHeaderMismatch => write!(f, "previous filter header mismatch"),
             CFHeaderSyncError::HeaderChainIndexOverflow => write!(
                 f,
-                "indexed out of bounds on the header chain trying to find a block hash."
+                "indexed out of bounds on the header chain trying to find a block hash"
             ),
             CFHeaderSyncError::UnexpectedCFHeaderMessage => write!(
                 f,
-                "we already had a message from this peer staged in our queue."
+                "we already had a message from this peer staged in our queue"
             ),
             CFHeaderSyncError::StartHeightMisalignment => write!(
                 f,
@@ -102,21 +102,21 @@ impl core::fmt::Display for CFilterSyncError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CFilterSyncError::UnknownStophash => {
-                write!(f, "a stop hash recevied was not found in our chain.")
+                write!(f, "a stop hash received was not found in our chain")
             }
             CFilterSyncError::UnrequestedStophash => {
-                write!(f, "we did not request this stop hash.")
+                write!(f, "we did not request this stop hash")
             }
             CFilterSyncError::UnknownFilterHash => write!(
                 f,
-                "we could not find the filter hash corresponding to that stop hash."
+                "we could not find the filter hash corresponding to that stop hash"
             ),
             CFilterSyncError::MisalignedFilterHash => write!(
                 f,
-                "the filter hash from our header chain and this filter hash do not match."
+                "the filter hash from our header chain and this filter hash do not match"
             ),
             CFilterSyncError::OutOfOrderFilter => {
-                write!(f, "a filter was received before the filters preceding it.")
+                write!(f, "a filter was received before the filters preceding it")
             }
         }
     }
@@ -134,10 +134,10 @@ impl Display for BlockScanError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             BlockScanError::NoBlockHash => {
-                write!(f, "the block sent to us does not have a known hash.")
+                write!(f, "the block sent to us does not have a known hash")
             }
             BlockScanError::InvalidMerkleRoot => {
-                write!(f, "the block sent to us does not have a merkle root that matches its header commitment.")
+                write!(f, "the block sent to us does not have a merkle root that matches its header commitment")
             }
         }
     }

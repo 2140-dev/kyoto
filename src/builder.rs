@@ -22,7 +22,7 @@ const MAX_PEERS: u8 = 15;
 /// use std::collections::HashSet;
 /// use bip157::{Builder, Network};
 ///
-/// let host = (IpAddr::from(Ipv4Addr::new(0, 0, 0, 0)), None);
+/// let host = IpAddr::from(Ipv4Addr::new(0, 0, 0, 0));
 /// let builder = Builder::new(Network::Regtest);
 /// let (node, client) = builder
 ///     .add_peers(vec![host.into()])

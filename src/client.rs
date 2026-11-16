@@ -111,7 +111,7 @@ impl Requester {
     pub fn shutdown(&self) -> Result<(), ClientError> {
         self.ntx
             .send(ClientMessage::Shutdown)
-            .map_err(|_| ClientError::SendError)
+            .map_err(|_| ClientError::Send)
     }
 
     /// Submit a package of transactions to the network, returning when transaction data was sent
@@ -121,7 +121,7 @@ impl Requester {
     ///
     /// # Returns
     ///
-    /// The `Wtxid` of the child or singleton transaction.
+    /// The [`Wtxid`] of the child or singleton transaction.
     ///
     /// # Errors
     ///
@@ -132,15 +132,15 @@ impl Requester {
         let client_request = ClientRequest::new(package, tx);
         self.ntx
             .send(ClientMessage::Broadcast(client_request))
-            .map_err(|_| ClientError::SendError)?;
-        rx.await.map_err(|_| ClientError::RecvError)
+            .map_err(|_| ClientError::Send)?;
+        rx.await.map_err(|_| ClientError::Recv)
     }
 
     /// A connection has a minimum transaction fee requirement to enter its mempool. For proper transaction propagation,
     /// transactions should have a fee rate at least as high as the maximum fee filter received.
     /// This method returns the maximum fee rate requirement of all connected peers.
     ///
-    /// For more information, refer to BIP133
+    /// For more information, refer to [BIP133](https://github.com/bitcoin/bips/blob/master/bip-0133.mediawiki).
     ///
     /// # Errors
     ///
@@ -150,8 +150,8 @@ impl Requester {
         let request = ClientRequest::new((), tx);
         self.ntx
             .send(ClientMessage::GetBroadcastMinFeeRate(request))
-            .map_err(|_| ClientError::SendError)?;
-        rx.await.map_err(|_| ClientError::RecvError)
+            .map_err(|_| ClientError::Send)?;
+        rx.await.map_err(|_| ClientError::Recv)
     }
 
     /// Request a block be fetched. Note that this method will request a block
@@ -160,14 +160,16 @@ impl Requester {
     ///
     /// # Errors
     ///
-    /// If the node has stopped running.
+    /// - If the node has stopped running.
+    /// - If the block hash is not a member of the chain of most work.
+    /// - If the block is reorganized out of the chain of most work while the request is pending.
     pub async fn get_block(&self, block_hash: BlockHash) -> Result<IndexedBlock, FetchBlockError> {
         let (tx, rx) = tokio::sync::oneshot::channel::<Result<IndexedBlock, FetchBlockError>>();
         let message = ClientRequest::new((block_hash, None), tx);
         self.ntx
             .send(ClientMessage::GetBlock(message))
-            .map_err(|_| FetchBlockError::SendError)?;
-        rx.await.map_err(|_| FetchBlockError::RecvError)?
+            .map_err(|_| FetchBlockError::Send)?;
+        rx.await.map_err(|_| FetchBlockError::Recv)?
     }
 
     /// Request a block be fetched and receive a [`tokio::sync::oneshot::Receiver`]
@@ -175,7 +177,9 @@ impl Requester {
     ///
     /// # Errors
     ///
-    /// If the node has stopped running.
+    /// If the node has stopped running. The receiver resolves to an error if the block hash is
+    /// not a member of the chain of most work, or if the block is reorganized out of the chain of
+    /// most work while the request is pending.
     pub fn request_block(
         &self,
         block_hash: BlockHash,
@@ -184,7 +188,7 @@ impl Requester {
         let message = ClientRequest::new((block_hash, None), tx);
         self.ntx
             .send(ClientMessage::GetBlock(message))
-            .map_err(|_| FetchBlockError::SendError)?;
+            .map_err(|_| FetchBlockError::Send)?;
         Ok(rx)
     }
 
@@ -194,6 +198,13 @@ impl Requester {
     /// this value may provide skewed estimates, as averages are more effected by outliers than
     /// medians. For a rudimentary estimation of the fee rate required to enter the next block,
     /// this method may suffice.
+    ///
+    /// # Errors
+    ///
+    /// - If the node has stopped running.
+    /// - If the block hash is not a member of the chain of most work.
+    /// - If the block is reorganized out of the chain of most work while the request is pending.
+    /// - If the block witness data does not match the coinbase commitment.
     pub async fn average_fee_rate(
         &self,
         block_hash: BlockHash,
@@ -202,8 +213,8 @@ impl Requester {
         let message = ClientRequest::new((block_hash, Some(BlockType::Witness)), tx);
         self.ntx
             .send(ClientMessage::GetBlock(message))
-            .map_err(|_| FetchBlockError::SendError)?;
-        let indexed_block = rx.await.map_err(|_| FetchBlockError::RecvError)??;
+            .map_err(|_| FetchBlockError::Send)?;
+        let indexed_block = rx.await.map_err(|_| FetchBlockError::Recv)??;
         if !indexed_block.block.check_witness_commitment() {
             return Err(FetchBlockError::InvalidWitnessCommitment);
         }
@@ -233,8 +244,8 @@ impl Requester {
         let request = ClientRequest::new((), tx);
         self.ntx
             .send(ClientMessage::GetPeerInfo(request))
-            .map_err(|_| ClientError::SendError)?;
-        rx.await.map_err(|_| ClientError::RecvError)
+            .map_err(|_| ClientError::Send)?;
+        rx.await.map_err(|_| ClientError::Recv)
     }
 
     /// Starting after the configured checkpoint, re-emit all block filters.
@@ -245,7 +256,7 @@ impl Requester {
     pub fn rescan(&self) -> Result<(), ClientError> {
         self.ntx
             .send(ClientMessage::Rescan(None))
-            .map_err(|_| ClientError::SendError)
+            .map_err(|_| ClientError::Send)
     }
 
     /// Re-emit block filters _after_ the specified height.
@@ -256,7 +267,7 @@ impl Requester {
     pub fn rescan_from(&self, height: u32) -> Result<(), ClientError> {
         self.ntx
             .send(ClientMessage::Rescan(Some(height)))
-            .map_err(|_| ClientError::SendError)
+            .map_err(|_| ClientError::Send)
     }
 
     /// Add another known peer to connect to.
@@ -267,7 +278,7 @@ impl Requester {
     pub fn add_peer(&self, peer: impl Into<TrustedPeer>) -> Result<(), ClientError> {
         self.ntx
             .send(ClientMessage::AddPeer(peer.into()))
-            .map_err(|_| ClientError::SendError)
+            .map_err(|_| ClientError::Send)
     }
 
     /// The height and hash of the block in the chain of most work.
@@ -280,8 +291,8 @@ impl Requester {
         let request = ClientRequest::new((), tx);
         self.ntx
             .send(ClientMessage::BestBlock(request))
-            .map_err(|_| ClientError::SendError)?;
-        rx.await.map_err(|_| ClientError::RecvError)
+            .map_err(|_| ClientError::Send)?;
+        rx.await.map_err(|_| ClientError::Recv)
     }
 
     /// Look up a header at a specific height in the locally synced chain of most work.
@@ -295,8 +306,8 @@ impl Requester {
         let request = ClientRequest::new(height, tx);
         self.ntx
             .send(ClientMessage::GetHeader(request))
-            .map_err(|_| ClientError::SendError)?;
-        rx.await.map_err(|_| ClientError::RecvError)
+            .map_err(|_| ClientError::Send)?;
+        rx.await.map_err(|_| ClientError::Recv)
     }
 
     /// Look up the height of a block hash in the locally synced chain of most work.
@@ -310,8 +321,8 @@ impl Requester {
         let request = ClientRequest::new(hash, tx);
         self.ntx
             .send(ClientMessage::HeightOfHash(request))
-            .map_err(|_| ClientError::SendError)?;
-        rx.await.map_err(|_| ClientError::RecvError)
+            .map_err(|_| ClientError::Send)?;
+        rx.await.map_err(|_| ClientError::Recv)
     }
 
     /// Subscribe to transaction gossip that involves scripts or outpoints of interest. This
@@ -351,6 +362,10 @@ impl Requester {
     /// matching the scripts and outpoints provided. Note, duplicate transactions may be sent. On
     /// subsequent subscriptions, this method returns `None`, as there is an exisiting
     /// [`mpsc::Receiver`].
+    ///
+    /// # Errors
+    ///
+    /// If the node has stopped running.
     pub async fn subscribe_to_gossip(
         &self,
         req: GossipMonitorRequest,
@@ -359,25 +374,23 @@ impl Requester {
         let request = ClientRequest::new(req, tx);
         self.ntx
             .send(ClientMessage::SubscribeGossip(request))
-            .map_err(|_| ClientError::SendError)?;
-        rx.await.map_err(|_| ClientError::RecvError)
+            .map_err(|_| ClientError::Send)?;
+        rx.await.map_err(|_| ClientError::Recv)
     }
 
     /// Unsubscribe from all transaction gossip.
+    ///
+    /// # Errors
+    ///
+    /// If the node has stopped running.
     pub fn unsubscribe_from_gossip(&self) -> Result<(), ClientError> {
         self.ntx
             .send(ClientMessage::UnsubscribeGossip)
-            .map_err(|_| ClientError::SendError)
+            .map_err(|_| ClientError::Send)
     }
 
     /// Check if the node is running.
     pub fn is_running(&self) -> bool {
         self.ntx.send(ClientMessage::NoOp).is_ok()
-    }
-}
-
-impl<T> From<mpsc::error::SendError<T>> for ClientError {
-    fn from(_: mpsc::error::SendError<T>) -> Self {
-        ClientError::SendError
     }
 }

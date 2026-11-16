@@ -53,39 +53,34 @@ async fn main() {
     // Continually listen for events until the node is synced to its peers.
     loop {
         tokio::select! {
-            info = info_rx.recv() => {
-                if let Some(info) = info {
-                    tracing::info!("{info}");
-                }
+            Some(info) = info_rx.recv() => {
+                tracing::info!("{info}");
             }
-            warn = warn_rx.recv() => {
-                if let Some(warn) = warn {
-                    tracing::warn!("{warn}");
-                }
+            Some(warn) = warn_rx.recv() => {
+                tracing::warn!("{warn}");
             }
-            event = event_rx.recv() => {
-                if let Some(event) = event {
-                    match event {
-                        Event::IndexedFilter(filter) => {
-                            let height = filter.height();
-                            tracing::info!("Checking filter: {height}");
-                            if filter.contains_any(addresses.iter()) {
-                                let hash = filter.block_hash();
-                                tracing::info!("Found script at {}!", hash);
-                                let indexed_block = requester.get_block(hash).await.unwrap();
-                                let coinbase = indexed_block.block.txdata.first().unwrap().compute_txid();
-                                tracing::info!("Coinbase transaction ID: {}", coinbase);
-                                break;
-                            }
-                        },
-                        Event::ChainUpdate(BlockHeaderChanges::Connected(at)) => {
-                            tracing::info!("New best tip {}", at.height);
+            Some(event) = event_rx.recv() => {
+                match event {
+                    Event::IndexedFilter(filter) => {
+                        let height = filter.height();
+                        tracing::info!("Checking filter: {height}");
+                        if filter.contains_any(addresses.iter()) {
+                            let hash = filter.block_hash();
+                            tracing::info!("Found script at {}!", hash);
+                            let indexed_block = requester.get_block(hash).await.unwrap();
+                            let coinbase = indexed_block.block.txdata.first().unwrap().compute_txid();
+                            tracing::info!("Coinbase transaction ID: {}", coinbase);
+                            break;
                         }
-                        Event::FiltersSynced(_) => break,
-                        _ => (),
+                    },
+                    Event::ChainUpdate(BlockHeaderChanges::Connected(at)) => {
+                        tracing::info!("New best tip {}", at.height);
                     }
+                    Event::FiltersSynced(_) => break,
+                    _ => (),
                 }
             }
+            else => break,
         }
     }
     let _ = requester.shutdown();

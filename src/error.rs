@@ -5,7 +5,7 @@ use bitcoin::BlockHash;
 use crate::impl_sourceless_error;
 
 /// Errors that prevent the node from running.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NodeError {
     /// The node has exhausted all possible options for peers.
     NoReachablePeers,
@@ -24,22 +24,23 @@ impl core::fmt::Display for NodeError {
 impl_sourceless_error!(NodeError);
 
 /// Errors occurring when the client is talking to the node.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ClientError {
     /// The channel to the node was likely closed and dropped from memory.
-    SendError,
+    Send,
     /// A channel was dropped before sending its value back.
-    RecvError,
+    Recv,
 }
 
 impl core::fmt::Display for ClientError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ClientError::SendError => {
-                write!(f, "the receiver of this message was dropped from memory.")
+            ClientError::Send => {
+                write!(f, "the receiver of this message was dropped from memory")
             }
-            ClientError::RecvError => {
-                write!(f, "the sender of data was dropped from memory.")
+            ClientError::Recv => {
+                write!(f, "the sender of data was dropped from memory")
             }
         }
     }
@@ -48,13 +49,14 @@ impl core::fmt::Display for ClientError {
 impl_sourceless_error!(ClientError);
 
 /// Errors occurring when the client is fetching blocks from the node.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum FetchBlockError {
     /// The channel to the node was likely closed and dropped from memory.
     /// This implies the node is not running.
-    SendError,
+    Send,
     /// The channel to the client was likely closed by the node and dropped from memory.
-    RecvError,
+    Recv,
     /// The hash is not a member of the chain of most work.
     UnknownHash,
     /// The witness data of the block does not match the commitment in the coinbase.
@@ -66,26 +68,26 @@ pub enum FetchBlockError {
 impl core::fmt::Display for FetchBlockError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FetchBlockError::SendError => {
-                write!(f, "the receiver of this message was dropped from memory.")
+            FetchBlockError::Send => {
+                write!(f, "the receiver of this message was dropped from memory")
             }
-            FetchBlockError::RecvError => write!(
+            FetchBlockError::Recv => write!(
                 f,
-                "the channel to the client was likely closed by the node and dropped from memory."
+                "the channel to the client was likely closed by the node and dropped from memory"
             ),
             FetchBlockError::UnknownHash => {
-                write!(f, "the hash is not a member of the chain of most work.")
+                write!(f, "the hash is not a member of the chain of most work")
             }
             FetchBlockError::InvalidWitnessCommitment => {
                 write!(
                     f,
-                    "the block witness data does not match the coinbase commitment."
+                    "the block witness data does not match the coinbase commitment"
                 )
             }
             FetchBlockError::Reorged(hash) => {
                 write!(
                     f,
-                    "block {hash} was reorganized out of the chain of most work while pending."
+                    "block {hash} was reorganized out of the chain of most work while pending"
                 )
             }
         }
@@ -95,7 +97,8 @@ impl core::fmt::Display for FetchBlockError {
 impl_sourceless_error!(FetchBlockError);
 
 /// Errors when constructing transaction packages.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PackageError {
     /// Packages may not include more than two transactions and must include at least one
     /// transaction.
@@ -115,8 +118,10 @@ impl core::fmt::Display for PackageError {
                 )
             }
             PackageError::UnrelatedTransactions => {
-                write!(f, "packages must have dependent inputs and outputs.")
+                write!(f, "packages must have dependent inputs and outputs")
             }
         }
     }
 }
+
+impl_sourceless_error!(PackageError);

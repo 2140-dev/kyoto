@@ -27,24 +27,12 @@ use crate::HashCheckpoint;
 const MAX_PREV_STOP_HASHES: usize = 3;
 
 /// A block header with associated height.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IndexedHeader {
     /// The height in the blockchain for this header.
     pub height: u32,
     /// The block header.
     pub header: Header,
-}
-
-impl std::cmp::PartialOrd for IndexedHeader {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl std::cmp::Ord for IndexedHeader {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.height.cmp(&other.height)
-    }
 }
 
 impl IndexedHeader {
@@ -73,7 +61,7 @@ pub(crate) enum HeaderSyncEffect {
 }
 
 /// Changes applied to the chain of block headers.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BlockHeaderChanges {
     /// A block was connected to the tip of the chain.
     Connected(IndexedHeader),
@@ -89,7 +77,7 @@ pub enum BlockHeaderChanges {
 }
 
 /// A previous chain state to start the sync from.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChainState {
     /// A summary of the chain state. The vector of headers should ideally be contiguous.
     Snapshot(Vec<IndexedHeader>),
@@ -260,9 +248,12 @@ impl Filter {
         self.block_hash
     }
 
-    pub fn contains_any<'a>(&'a self, scripts: impl Iterator<Item = &'a ScriptBuf>) -> bool {
+    pub fn contains_any<'a>(&'a self, scripts: impl IntoIterator<Item = &'a ScriptBuf>) -> bool {
         self.block_filter
-            .match_any(&self.block_hash, scripts.map(|script| script.to_bytes()))
+            .match_any(
+                &self.block_hash,
+                scripts.into_iter().map(|script| script.to_bytes()),
+            )
             .expect("vec reader is infallible")
     }
 

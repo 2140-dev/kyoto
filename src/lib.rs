@@ -26,18 +26,13 @@
 //!     tokio::task::spawn(async move { node.run().await });
 //!     // Split the client into components that send messages and listen to messages
 //!     let Client { requester, info_rx: _, warn_rx: _, mut event_rx } = client;
-//!     loop {
-//!         if let Some(event) = event_rx.recv().await {
-//!             match event {
-//!                 Event::FiltersSynced(_) => {
-//!                     tracing::info!("Sync complete!");
-//!                     break;
-//!                 },
-//!                 _ => (),
-//!             }
+//!     while let Some(event) = event_rx.recv().await {
+//!         if let Event::FiltersSynced(_) = event {
+//!             tracing::info!("Sync complete!");
+//!             break;
 //!         }
 //!     }
-//!     requester.shutdown();
+//!     let _ = requester.shutdown();
 //! }
 //! ```
 
@@ -65,7 +60,7 @@ use chain::Filter;
 
 use std::{
     collections::HashSet,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -80,8 +75,6 @@ pub use chain::checkpoints::HashCheckpoint;
 pub use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 
-#[doc(inline)]
-pub use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::mpsc::UnboundedSender;
 
 #[doc(inline)]
@@ -103,7 +96,7 @@ pub use bitcoin::{
 pub extern crate tokio;
 
 /// A Bitcoin [`Block`] with associated height.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexedBlock {
     /// The height or index in the chain.
     pub height: u32,
@@ -118,7 +111,7 @@ impl IndexedBlock {
 }
 
 /// The type of filter to make a request for.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[non_exhaustive]
 pub enum FilterType {
     #[default]
@@ -174,12 +167,12 @@ impl IndexedFilter {
     }
 
     /// Does the filter contain a positive match for any of the provided scripts
-    pub fn contains_any<'a>(&'a self, scripts: impl Iterator<Item = &'a ScriptBuf>) -> bool {
+    pub fn contains_any<'a>(&'a self, scripts: impl IntoIterator<Item = &'a ScriptBuf>) -> bool {
         self.filter.contains_any(scripts)
     }
 
     /// Consume the index and get underlying block filter.
-    pub fn block_filter(self) -> BlockFilter {
+    pub fn into_block_filter(self) -> BlockFilter {
         self.filter.into_filter()
     }
 
@@ -194,19 +187,7 @@ impl IndexedFilter {
     }
 }
 
-impl std::cmp::PartialOrd for IndexedFilter {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl std::cmp::Ord for IndexedFilter {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.height.cmp(&other.height)
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum TrustedPeerInner {
     Addr(AddrV2),
     Hostname(String),
@@ -233,16 +214,16 @@ impl From<AddrV2> for TrustedPeerInner {
 ///
 /// let local_host = Ipv4Addr::new(0, 0, 0, 0);
 /// // Or construct a trusted peer directly.
-/// let trusted = TrustedPeer::new(AddrV2::Ipv4(local_host), None, ServiceFlags::P2P_V2);
+/// let trusted = TrustedPeer::with_services(AddrV2::Ipv4(local_host), 8333, ServiceFlags::P2P_V2);
 ///
 /// // Or implicitly with `into`
 /// let local_host = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
-/// let trusted: TrustedPeer = (local_host, None).into();
+/// let trusted: TrustedPeer = (local_host, 8333).into();
 ///
 /// // Or from a hostname — resolution happens at connection time.
 /// let trusted = TrustedPeer::from_hostname("bitcoind.svc.local", 8333);
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TrustedPeer {
     // The address or hostname of the remote node to connect to.
     address: TrustedPeerInner,
@@ -254,10 +235,15 @@ pub struct TrustedPeer {
 
 impl TrustedPeer {
     /// Create a new trusted peer.
-    pub fn new(address: impl Into<AddrV2>, port: Option<u16>, services: ServiceFlags) -> Self {
+    pub fn new(address: impl Into<AddrV2>, port: u16) -> Self {
+        Self::with_services(address, port, ServiceFlags::NONE)
+    }
+
+    /// Create a new trusted peer that is known to offer the given services.
+    pub fn with_services(address: impl Into<AddrV2>, port: u16, services: ServiceFlags) -> Self {
         Self {
             address: TrustedPeerInner::Addr(address.into()),
-            port,
+            port: Some(port),
             known_services: services,
         }
     }
@@ -319,13 +305,9 @@ impl TrustedPeer {
     }
 }
 
-impl From<(IpAddr, Option<u16>)> for TrustedPeer {
-    fn from(value: (IpAddr, Option<u16>)) -> Self {
-        let address = match value.0 {
-            IpAddr::V4(ip) => AddrV2::Ipv4(ip),
-            IpAddr::V6(ip) => AddrV2::Ipv6(ip),
-        };
-        TrustedPeer::new(address, value.1, ServiceFlags::NONE)
+impl From<(IpAddr, u16)> for TrustedPeer {
+    fn from(value: (IpAddr, u16)) -> Self {
+        TrustedPeer::from_socket_addr(SocketAddr::new(value.0, value.1))
     }
 }
 
@@ -341,8 +323,32 @@ impl From<SocketAddr> for TrustedPeer {
     }
 }
 
+impl From<Ipv4Addr> for TrustedPeer {
+    fn from(value: Ipv4Addr) -> Self {
+        TrustedPeer::from_ip(value)
+    }
+}
+
+impl From<Ipv6Addr> for TrustedPeer {
+    fn from(value: Ipv6Addr) -> Self {
+        TrustedPeer::from_ip(value)
+    }
+}
+
+impl From<SocketAddrV4> for TrustedPeer {
+    fn from(value: SocketAddrV4) -> Self {
+        TrustedPeer::from_socket_addr(value)
+    }
+}
+
+impl From<SocketAddrV6> for TrustedPeer {
+    fn from(value: SocketAddrV6) -> Self {
+        TrustedPeer::from_socket_addr(value)
+    }
+}
+
 /// Route network traffic through a Socks5 proxy, typically used by a Tor daemon.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Socks5Proxy(SocketAddr);
 
 impl Socks5Proxy {
@@ -410,7 +416,7 @@ impl Default for Config {
 ///
 /// This is **not** a generic DNS implementation. It is specifically tailored to query and parse DNS for Bitcoin seeders.
 /// Iternally, three queries will be made with varying filters for the requested service flags.
-/// Similar to [`lookup_host`](tokio::net::lookup_host), this has no guarantee to return any `IpAddr`.
+/// Similar to [`lookup_host`](tokio::net::lookup_host), this has no guarantee to return any [`IpAddr`].
 ///
 /// # Example usage
 ///
@@ -489,7 +495,7 @@ impl Dialog {
 }
 
 /// A package is a set of dependent transactions to submit to the mempool.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Package {
     parent: Transaction,
     child: Option<Transaction>,
@@ -593,14 +599,14 @@ impl From<Transaction> for Package {
 }
 
 /// Instruct the node to watch for unconfirmed transactions with a certain criteria.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GossipMonitorRequest {
     scripts: HashSet<ScriptBuf>,
     txins: HashSet<OutPoint>,
 }
 
 /// Build a new [`GossipMonitorRequest`].
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GossipMonitorRequestBuilder {
     scripts: HashSet<ScriptBuf>,
     txins: HashSet<OutPoint>,
@@ -618,9 +624,9 @@ impl GossipMonitorRequestBuilder {
     }
 
     /// Watch for these [`OutPoint`] used as an input in unconfirmed transactions.
-    pub fn from_expected_inputs(txins: impl IntoIterator<Item = OutPoint>) -> Self {
+    pub fn from_expected_outpoints(outpoints: impl IntoIterator<Item = OutPoint>) -> Self {
         let mut op_set = HashSet::new();
-        op_set.extend(txins);
+        op_set.extend(outpoints);
         Self {
             scripts: HashSet::new(),
             txins: op_set,
@@ -628,14 +634,14 @@ impl GossipMonitorRequestBuilder {
     }
 
     /// Add scripts to the request.
-    pub fn add_scripts(mut self, scripts: impl IntoIterator<Item = ScriptBuf>) -> Self {
+    pub fn add_output_scripts(mut self, scripts: impl IntoIterator<Item = ScriptBuf>) -> Self {
         self.scripts.extend(scripts);
         self
     }
 
     /// Add outpoints to the request.
-    pub fn add_outpoints(mut self, txins: impl IntoIterator<Item = OutPoint>) -> Self {
-        self.txins.extend(txins);
+    pub fn add_outpoints(mut self, outpoints: impl IntoIterator<Item = OutPoint>) -> Self {
+        self.txins.extend(outpoints);
         self
     }
 

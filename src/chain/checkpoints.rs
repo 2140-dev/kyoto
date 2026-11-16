@@ -5,7 +5,7 @@ use bitcoin::{constants::genesis_block, params::Params, BlockHash};
 type Height = u32;
 
 /// A known block hash in the chain of most work.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct HashCheckpoint {
     /// The index of the block hash.
     pub height: Height,
@@ -50,18 +50,6 @@ impl HashCheckpoint {
             .unwrap();
         let height = 481_823;
         HashCheckpoint { height, hash }
-    }
-}
-
-impl std::cmp::PartialOrd for HashCheckpoint {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl std::cmp::Ord for HashCheckpoint {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.height.cmp(&other.height)
     }
 }
 
