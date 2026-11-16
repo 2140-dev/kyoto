@@ -1,7 +1,7 @@
 extern crate tokio;
 use std::{io, sync::Arc, time::Duration};
 
-use addrman::Record;
+use crate::addrman::Record;
 use bip324::futures::{Protocol, ProtocolReader};
 use bip324::{OutboundCipher, Role};
 use bitcoin::BlockHash;
@@ -110,6 +110,8 @@ impl Peer {
                     self.dialog.send_warning(Warning::ConnectionFailed(
                         ConnectionFailure::CouldNotConnect,
                     ));
+                    let mut db_lock = self.db.lock().await;
+                    db_lock.failed(&self.source);
                 }
                 let (protocol_reader, encryptor, w) = handshake_result?;
                 writer = w;

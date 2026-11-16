@@ -39,6 +39,8 @@
 #![warn(missing_docs)]
 pub mod chain;
 
+mod addrman;
+
 use crate::network::{ConnectionType, PeerTimeoutConfig};
 
 mod network;
