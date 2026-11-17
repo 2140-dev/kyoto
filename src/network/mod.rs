@@ -1,13 +1,11 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs::{self, File},
     net::IpAddr,
-    path::PathBuf,
     sync::Arc,
     time::Duration,
 };
 
-use addrman::{io::FileExt, Record, Table};
+use crate::addrman::{Record, Table};
 use bitcoin::{
     block::Header,
     consensus::Decodable,
@@ -64,12 +62,7 @@ const B_NEW: usize = 16;
 const S_NEW: usize = 16;
 const W_NEW: usize = 8;
 
-// Maximum occurrences of a single network address
-const MAX_ADDR: usize = 4;
-// How may times a peer can fail before they are terrible
-const MAX_ATTEMPS: u8 = 2;
-// If it has been less than a week, only allow a single fail
-const MAX_WEEKLY_ATTEMPTS: u8 = 1;
+const MAX_TRIED_FAILURES: u8 = 10;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct PeerId(pub(crate) u32);
@@ -555,14 +548,7 @@ impl AddressBook {
         for addr in gossip {
             let record =
                 Record::new_from_addrv2_source(addr.addr, addr.port, addr.services, source);
-            if self.new.count(&record) < MAX_ADDR {
-                if let Some(conflict) = self.new.add(&record) {
-                    if conflict.is_terrible(MAX_ATTEMPS, MAX_WEEKLY_ATTEMPTS) {
-                        self.new.remove(&conflict);
-                        self.new.add(&record);
-                    }
-                }
-            }
+            self.new.add(&record);
         }
     }
 
@@ -582,14 +568,24 @@ impl AddressBook {
     }
 
     pub(crate) fn failed(&mut self, record: &Record) {
-        self.tried.failed_connection(record);
+        self.new.remove(record);
+        if self
+            .tried
+            .failed_connection(record)
+            .is_some_and(|failures| failures >= MAX_TRIED_FAILURES)
+        {
+            self.tried.remove(record);
+        }
     }
 
     pub(crate) fn tried(&mut self, record: &Record) {
         self.new.remove(record);
         if let Some(conflict) = self.tried.add(record) {
-            self.tried.remove(&conflict);
-            self.tried.add(record);
+            if conflict.network_addr() != record.network_addr() {
+                self.tried.remove(&conflict);
+                self.tried.add(record);
+                self.new.add(&conflict);
+            }
         }
         self.tried.successful_connection(record);
     }
@@ -598,33 +594,95 @@ impl AddressBook {
         self.new.remove(record);
         self.tried.remove(record);
     }
-
-    #[allow(unused)]
-    pub(crate) fn write_tables<P: AsRef<PathBuf>>(&self, dir: P) -> Result<(), std::io::Error> {
-        let dirname = dir.as_ref();
-        let tried_tmp_path = dirname.join("tmp_tried.book");
-        let tried_final_path = dirname.join("tried.book");
-        let new_tmp_path = dirname.join("tmp_new.book");
-        let new_final_path = dirname.join("new.book");
-        let mut tried_file = File::create(&tried_tmp_path)?;
-        tried_file.write_table(&self.tried)?;
-        fs::rename(tried_tmp_path, tried_final_path)?;
-        let mut new_file = File::create(&new_tmp_path)?;
-        new_file.write_table(&self.new)?;
-        fs::rename(new_tmp_path, new_final_path)?;
-        Ok(())
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::{net::Ipv4Addr, time::Duration};
 
-    use bitcoin::{hashes::Hash, BlockHash};
+    use bitcoin::{
+        hashes::Hash,
+        p2p::{
+            address::{AddrV2, AddrV2Message},
+            ServiceFlags,
+        },
+        BlockHash,
+    };
 
     use crate::network::{LastBlockMonitor, MessageState, PingState};
 
-    use super::FilterRate;
+    use super::{AddressBook, FilterRate, Record, MAX_TRIED_FAILURES};
+
+    fn gossip_from_sources(book: &mut AddressBook, sources: u8) {
+        for source in 0..sources {
+            let message = AddrV2Message {
+                time: 0,
+                services: ServiceFlags::NONE,
+                addr: AddrV2::Ipv4(Ipv4Addr::new(9, 9, 9, 9)),
+                port: 8333,
+            };
+            let source = AddrV2::Ipv4(Ipv4Addr::new(10 + source, 0, 0, 1));
+            book.add_gossiped(std::iter::once(message), &source);
+        }
+    }
+
+    #[test]
+    fn test_ban_removes_every_copy() {
+        let mut book = AddressBook::new();
+        gossip_from_sources(&mut book, 8);
+        let record = book.select().unwrap();
+        book.ban(&record);
+        assert!(book.is_empty());
+    }
+
+    #[test]
+    fn test_failed_removes_new_peer() {
+        let mut book = AddressBook::new();
+        gossip_from_sources(&mut book, 8);
+        let record = book.select().unwrap();
+        book.failed(&record);
+        assert!(book.is_empty());
+    }
+
+    #[test]
+    fn test_tried_conflicts_move_to_new() {
+        let mut book = AddressBook::new();
+        let source = AddrV2::Ipv4(Ipv4Addr::new(10, 0, 0, 1));
+        for host in 0..=255 {
+            let addr = AddrV2::Ipv4(Ipv4Addr::new(9, 9, 9, host));
+            let record = Record::new_from_addrv2_source(addr, 8333, ServiceFlags::NONE, &source);
+            book.tried(&record);
+        }
+        assert!(!book.new.is_empty());
+    }
+
+    #[test]
+    fn test_tried_peer_survives_failure_burst() {
+        let mut book = AddressBook::new();
+        gossip_from_sources(&mut book, 1);
+        let record = book.select().unwrap();
+        book.tried(&record);
+        for _ in 0..MAX_TRIED_FAILURES * 2 {
+            book.failed(&record);
+        }
+        assert!(!book.tried.is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_tried_peer_evicted_after_spaced_failures() {
+        let mut book = AddressBook::new();
+        gossip_from_sources(&mut book, 1);
+        let record = book.select().unwrap();
+        book.tried(&record);
+        for _ in 1..MAX_TRIED_FAILURES {
+            tokio::time::advance(Duration::from_secs(120)).await;
+            book.failed(&record);
+        }
+        assert!(!book.tried.is_empty());
+        tokio::time::advance(Duration::from_secs(120)).await;
+        book.failed(&record);
+        assert!(book.is_empty());
+    }
 
     #[tokio::test(start_paused = true)]
     async fn test_version_message_state() {

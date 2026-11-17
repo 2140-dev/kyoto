@@ -473,6 +473,7 @@ impl Node {
             self.dialog.send_warning(Warning::ConnectionFailed(
                 ConnectionFailure::UnsupportedVersion,
             ));
+            self.peer_map.ban(nonce).await;
             return Ok(MainThreadMessage::Disconnect);
         }
         match self.state {
@@ -484,6 +485,7 @@ impl Node {
                     self.dialog.send_warning(Warning::ConnectionFailed(
                         ConnectionFailure::NoCompactFilters,
                     ));
+                    self.peer_map.ban(nonce).await;
                     return Ok(MainThreadMessage::Disconnect);
                 }
             }
