@@ -1,7 +1,7 @@
 extern crate tokio;
 use std::{io, sync::Arc, time::Duration};
 
-use crate::addrman::Record;
+use crate::network::addrman::Record;
 use bip324::futures::{Protocol, ProtocolReader};
 use bip324::{OutboundCipher, Role};
 use bitcoin::BlockHash;

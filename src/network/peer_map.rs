@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::addrman::Record;
+use crate::network::addrman::Record;
 use bitcoin::{
     key::rand,
     p2p::{address::AddrV2, ServiceFlags},

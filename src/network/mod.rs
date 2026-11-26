@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use crate::addrman::{Record, Table};
+use crate::network::addrman::{Record, Table};
 use bitcoin::{
     block::Header,
     consensus::Decodable,
@@ -29,6 +29,7 @@ use error::PeerError;
 
 use crate::{broadcaster::TxIdentifier, network::gossip::GossipMonitor, BlockType, Socks5Proxy};
 
+pub(crate) mod addrman;
 pub(crate) mod dns;
 pub(crate) mod error;
 pub(crate) mod gossip;
