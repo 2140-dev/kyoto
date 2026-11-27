@@ -25,7 +25,7 @@ use crate::{
         block_queue::{BlockQueue, ProcessBlockResponse},
         chain::Chain,
         checkpoints::Checkpoint,
-        error::{CFHeaderSyncError, CFilterSyncError},
+        error::{CFHeaderSyncError, CFilterSyncError, HeaderSyncError},
         CFHeaderChanges, ChainState, FilterCheck, HeaderSyncEffect, IndexedHeader,
     },
     error::FetchBlockError,
@@ -548,6 +548,18 @@ impl Node {
                     self.block_queue.remove(&reorgs);
                 }
             },
+            Err(HeaderSyncError::FloatingHeaders) => {
+                //We might receive unconnectable headers during initial headers sync, we don't want
+                //to punish that.
+                if self.state == NodeState::Behind {
+                    return None;
+                }
+                return Some(MainThreadMessage::GetHeaders(GetHeadersMessage {
+                    version: WTXID_VERSION,
+                    locator_hashes: self.chain.header_chain.locators(),
+                    stop_hash: BlockHash::all_zeros(),
+                }));
+            }
             Err(_) => {
                 self.dialog
                     .send_warning(Warning::PeerMisbehaved(Misbehavior::InvalidHeaders));
@@ -724,5 +736,82 @@ impl Node {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bitcoin::{block::Header, constants::genesis_block, Network};
+
+    use super::Node;
+    use crate::{
+        network::{MainThreadMessage, PeerId},
+        Config, NodeState,
+    };
+
+    const PEER: PeerId = PeerId(0);
+
+    fn regtest_node() -> Node {
+        let (node, _client) = Node::new(Network::Regtest, Config::default());
+        node
+    }
+
+    fn mine_child(parent: Header) -> Header {
+        let mut child = parent;
+        child.prev_blockhash = parent.block_hash();
+        child.time += 600;
+        child.nonce = 0;
+        while child.validate_pow(child.target()).is_err() {
+            child.nonce += 1;
+        }
+        child
+    }
+
+    // https://github.com/2140-dev/kyoto/issues/675
+    // A BIP130 announcement of a new block arrives while the header sync is still
+    // running: the announced header's parent is not in our chain yet.
+    #[tokio::test]
+    async fn floating_header_during_sync_does_not_disconnect() {
+        let mut node = regtest_node();
+        let genesis = genesis_block(Network::Regtest).header;
+        let unknown_parent = mine_child(genesis);
+        let announced = mine_child(unknown_parent);
+        assert_eq!(node.state, NodeState::Behind);
+        let response = node.handle_headers(PEER, vec![announced]).await;
+        assert!(
+            !matches!(response, Some(MainThreadMessage::Disconnect)),
+            "peer was disconnected for announcing a header that does not connect yet"
+        );
+    }
+
+    // After the header sync, a floating header means we missed blocks: ask the
+    // announcing peer for them instead of banning it.
+    #[tokio::test]
+    async fn floating_header_after_sync_requests_headers() {
+        let mut node = regtest_node();
+        let genesis = genesis_block(Network::Regtest).header;
+        let first = mine_child(genesis);
+        node.handle_headers(PEER, vec![first]).await;
+        node.handle_headers(PEER, vec![]).await;
+        assert_eq!(node.state, NodeState::HeadersSynced);
+        let missed = mine_child(first);
+        let announced = mine_child(missed);
+        let response = node.handle_headers(PEER, vec![announced]).await;
+        assert!(
+            matches!(response, Some(MainThreadMessage::GetHeaders(_))),
+            "expected getheaders, got {response:?}"
+        );
+    }
+
+    // Headers that do not link to each other are invalid, not merely early: still ban.
+    #[tokio::test]
+    async fn disconnected_batch_still_disconnects() {
+        let mut node = regtest_node();
+        let genesis = genesis_block(Network::Regtest).header;
+        let first = mine_child(genesis);
+        let skipped = mine_child(first);
+        let after_gap = mine_child(skipped);
+        let response = node.handle_headers(PEER, vec![first, after_gap]).await;
+        assert!(matches!(response, Some(MainThreadMessage::Disconnect)));
     }
 }
