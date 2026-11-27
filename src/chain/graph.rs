@@ -56,7 +56,7 @@ impl Tip {
 
 impl From<Checkpoint> for Tip {
     fn from(value: Checkpoint) -> Self {
-        Tip::from_checkpoint(value.height, value.hash)
+        Tip::from_checkpoint(value.height(), value.block_hash())
     }
 }
 

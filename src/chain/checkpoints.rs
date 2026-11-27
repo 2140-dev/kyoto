@@ -8,15 +8,25 @@ type Height = u32;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Checkpoint {
     /// The index of the block hash.
-    pub height: Height,
+    height: Height,
     /// The Bitcoin block hash expected at this height
-    pub hash: BlockHash,
+    hash: BlockHash,
 }
 
 impl Checkpoint {
     /// Create a new checkpoint from a known checkpoint of significant work.
     pub fn new(height: Height, hash: BlockHash) -> Self {
         Checkpoint { height, hash }
+    }
+
+    /// The index of the block hash.
+    pub fn height(&self) -> Height {
+        self.height
+    }
+
+    /// The Bitcoin block hash expected at this height
+    pub fn block_hash(&self) -> BlockHash {
+        self.hash
     }
 
     /// Build a checkpoint from the genesis block for a given network.
