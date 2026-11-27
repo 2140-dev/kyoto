@@ -68,6 +68,8 @@ Use `cargo fmt` with the default settings to format code before committing.
 Running `cargo clippy --all-targets` should also
 pass with no lints. This is also enforced by the CI.
 
+Use the [Rust API guidelines](https://rust-lang.github.io/api-guidelines/about.html) whenever applicable.
+
 The use of any `unsafe` code blocks is completely forbidden.
 
 Any use of `clone` will be scrutinized, and use of `unwrap` or `expect` is generally forbidden.
