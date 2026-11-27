@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use bitcoin::{constants::genesis_block, params::Params, BlockHash};
 
 type Height = u32;
@@ -66,23 +64,5 @@ impl Checkpoint {
 impl From<(u32, BlockHash)> for Checkpoint {
     fn from(value: (u32, BlockHash)) -> Self {
         Checkpoint::new(value.0, value.1)
-    }
-}
-
-impl TryFrom<(u32, String)> for Checkpoint {
-    type Error = <BlockHash as FromStr>::Err;
-
-    fn try_from(value: (u32, String)) -> Result<Self, Self::Error> {
-        let hash = BlockHash::from_str(&value.1)?;
-        Ok(Checkpoint::new(value.0, hash))
-    }
-}
-
-impl TryFrom<(u32, &str)> for Checkpoint {
-    type Error = <BlockHash as FromStr>::Err;
-
-    fn try_from(value: (u32, &str)) -> Result<Self, Self::Error> {
-        let hash = BlockHash::from_str(value.1)?;
-        Ok(Checkpoint::new(value.0, hash))
     }
 }
