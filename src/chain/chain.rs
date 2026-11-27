@@ -433,14 +433,14 @@ mod tests {
     use crate::chain::ChainState;
     use crate::FilterType;
     use crate::{
-        chain::checkpoints::HashCheckpoint,
+        chain::checkpoints::Checkpoint,
         messages::{Event, Info, Warning},
         Dialog,
     };
 
     use super::{CFHeaderChanges, Chain};
 
-    fn new_regtest(anchor: HashCheckpoint, peers: u8) -> Chain {
+    fn new_regtest(anchor: Checkpoint, peers: u8) -> Chain {
         let (info_tx, _) = tokio::sync::mpsc::channel::<Info>(1);
         let (warn_tx, _) = tokio::sync::mpsc::channel::<Warning>(1);
         let (event_tx, _) = tokio::sync::mpsc::unbounded_channel::<Event>();
@@ -453,8 +453,8 @@ mod tests {
         )
     }
 
-    fn base_block() -> HashCheckpoint {
-        HashCheckpoint::new(
+    fn base_block() -> Checkpoint {
+        Checkpoint::new(
             2496,
             BlockHash::from_str("4b4f478800538b3301b681358f84d870da0f9c4cde63ebd85fa0f273dfb07c6a")
                 .unwrap(),

@@ -69,7 +69,7 @@ use std::{
 
 // Re-exports
 #[doc(inline)]
-pub use chain::checkpoints::HashCheckpoint;
+pub use chain::checkpoints::Checkpoint;
 
 #[doc(inline)]
 pub use tokio::sync::mpsc::Receiver;

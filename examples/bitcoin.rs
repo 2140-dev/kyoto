@@ -3,7 +3,7 @@
 
 use bip157::builder::Builder;
 use bip157::chain::ChainState;
-use bip157::{Client, Event, HashCheckpoint, Info, Network, ScriptBuf};
+use bip157::{Checkpoint, Client, Event, Info, Network, ScriptBuf};
 use std::collections::HashSet;
 use tokio::time::Instant;
 
@@ -15,7 +15,7 @@ async fn main() {
     let subscriber = tracing_subscriber::FmtSubscriber::new();
     tracing::subscriber::set_global_default(subscriber).unwrap();
     let now = Instant::now();
-    let checkpoint = HashCheckpoint::taproot_activation();
+    let checkpoint = Checkpoint::taproot_activation();
     let start_height = checkpoint.height;
     let mut chain_height = start_height;
     // Add Bitcoin scripts to scan the blockchain for

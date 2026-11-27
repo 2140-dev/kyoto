@@ -3,7 +3,7 @@
 
 use bip157::chain::{BlockHeaderChanges, ChainState};
 use bip157::messages::Event;
-use bip157::{builder::Builder, chain::checkpoints::HashCheckpoint, Client};
+use bip157::{builder::Builder, chain::checkpoints::Checkpoint, Client};
 use bip157::{BlockHash, Network};
 use bitcoin::Address;
 use std::collections::HashSet;
@@ -20,8 +20,7 @@ async fn main() {
     let subscriber = tracing_subscriber::FmtSubscriber::new();
     tracing::subscriber::set_global_default(subscriber).unwrap();
     // Use a predefined checkpoint
-    let checkpoint =
-        HashCheckpoint::new(RECOVERY_HEIGHT, BlockHash::from_str(RECOVERY_HASH).unwrap());
+    let checkpoint = Checkpoint::new(RECOVERY_HEIGHT, BlockHash::from_str(RECOVERY_HASH).unwrap());
     // Add Bitcoin scripts to scan the blockchain for
     let address = Address::from_str(ADDR)
         .unwrap()
