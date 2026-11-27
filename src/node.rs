@@ -24,7 +24,7 @@ use crate::{
     chain::{
         block_queue::{BlockQueue, ProcessBlockResponse},
         chain::Chain,
-        checkpoints::HashCheckpoint,
+        checkpoints::Checkpoint,
         error::{CFHeaderSyncError, CFilterSyncError},
         CFHeaderChanges, ChainState, FilterCheck, HeaderSyncEffect, IndexedHeader,
     },
@@ -108,9 +108,8 @@ impl Node {
             peer_timeout_config,
         );
         // Build the chain
-        let chain_state = chain_state.unwrap_or(ChainState::Checkpoint(
-            HashCheckpoint::from_genesis(network),
-        ));
+        let chain_state =
+            chain_state.unwrap_or(ChainState::Checkpoint(Checkpoint::from_genesis(network)));
         let chain = Chain::new(
             network,
             chain_state,
@@ -256,7 +255,7 @@ impl Node {
                                 let block_tree = &self.chain.header_chain;
                                 let hash = block_tree.tip_hash();
                                 let height = block_tree.height();
-                                let checkpoint = HashCheckpoint::new(height, hash);
+                                let checkpoint = Checkpoint::new(height, hash);
                                 let send_result = oneshot.send(checkpoint);
                                 if send_result.is_err() {
                                     self.dialog.send_warning(Warning::ChannelDropped);
@@ -411,7 +410,7 @@ impl Node {
 
     fn emit_sync_complete(&self) {
         let update = SyncUpdate::new(
-            HashCheckpoint::new(
+            Checkpoint::new(
                 self.chain.header_chain.height(),
                 self.chain.header_chain.tip_hash(),
             ),

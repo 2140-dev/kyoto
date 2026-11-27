@@ -14,7 +14,7 @@ use crate::chain::block_subsidy;
 use crate::chain::IndexedHeader;
 use crate::messages::ClientRequest;
 use crate::{
-    BlockType, Event, GossipMonitorRequest, HashCheckpoint, Info, Package, TrustedPeer, Warning,
+    BlockType, Checkpoint, Event, GossipMonitorRequest, Info, Package, TrustedPeer, Warning,
 };
 
 use super::{error::ClientError, messages::ClientMessage};
@@ -286,8 +286,8 @@ impl Requester {
     /// # Errors
     ///
     /// If the node has stopped running.
-    pub async fn chain_tip(&self) -> Result<HashCheckpoint, ClientError> {
-        let (tx, rx) = tokio::sync::oneshot::channel::<HashCheckpoint>();
+    pub async fn chain_tip(&self) -> Result<Checkpoint, ClientError> {
+        let (tx, rx) = tokio::sync::oneshot::channel::<Checkpoint>();
         let request = ClientRequest::new((), tx);
         self.ntx
             .send(ClientMessage::BestBlock(request))

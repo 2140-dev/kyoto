@@ -5,7 +5,7 @@ use std::{
 };
 
 use bip157::{
-    chain::{checkpoints::HashCheckpoint, BlockHeaderChanges, ChainState},
+    chain::{checkpoints::Checkpoint, BlockHeaderChanges, ChainState},
     client::{Client, EventReceiver},
     node::Node,
     BlockHash, Event, GossipMonitorRequestBuilder, Info, Package, ServiceFlags, Transaction,
@@ -96,7 +96,7 @@ async fn sync_assert(best: &bitcoin::BlockHash, channel: &mut EventReceiver) {
         tokio::select! {
             event = channel.recv() => {
                 if let Some(Event::FiltersSynced(update)) = event {
-                    assert_eq!(update.tip().hash, *best);
+                    assert_eq!(update.tip().block_hash(), *best);
                     println!("Correct sync");
                     break;
                 };
@@ -135,7 +135,7 @@ async fn live_reorg() {
     let (node, client) = new_node(
         socket_addr,
         tempdir,
-        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(Checkpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -164,7 +164,7 @@ async fn live_reorg() {
                 assert_eq!(old_height as u32, blocks.first().unwrap().height);
             }
             bip157::messages::Event::FiltersSynced(update) => {
-                assert_eq!(update.tip().hash, best);
+                assert_eq!(update.tip().block_hash(), best);
                 requester.shutdown().unwrap();
                 break;
             }
@@ -188,7 +188,7 @@ async fn live_reorg_additional_sync() {
     let (node, client) = new_node(
         socket_addr,
         tempdir,
-        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(Checkpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -217,7 +217,7 @@ async fn live_reorg_additional_sync() {
                 assert_eq!(old_height as u32, blocks.first().unwrap().height);
             }
             bip157::messages::Event::FiltersSynced(update) => {
-                assert_eq!(update.tip().hash, best);
+                assert_eq!(update.tip().block_hash(), best);
                 break;
             }
             _ => {}
@@ -243,7 +243,7 @@ async fn various_client_methods() {
     let (node, client) = new_node(
         socket_addr,
         tempdir,
-        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(Checkpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -256,7 +256,7 @@ async fn various_client_methods() {
     sync_assert(&best, &mut channel).await;
     let _ = requester.broadcast_min_feerate().await.unwrap();
     let cp = requester.chain_tip().await.unwrap();
-    assert_eq!(cp.hash, best);
+    assert_eq!(cp.block_hash(), best);
     let peers = requester.peer_info().await.unwrap();
     assert_eq!(peers.len(), 1);
     assert!(requester.is_running());
@@ -266,18 +266,18 @@ async fn various_client_methods() {
     let header_at_1 = header_at_1.unwrap();
     assert_eq!(header_at_1.height, 1);
     // get_header at the tip should match the chain tip hash
-    let tip_header = requester.get_header(cp.height).await.unwrap();
+    let tip_header = requester.get_header(cp.height()).await.unwrap();
     assert!(tip_header.is_some());
     let tip_header = tip_header.unwrap();
-    assert_eq!(tip_header.height, cp.height);
-    assert_eq!(tip_header.block_hash(), cp.hash);
+    assert_eq!(tip_header.height, cp.height());
+    assert_eq!(tip_header.block_hash(), cp.block_hash());
     // get_header beyond the chain should return None
-    let too_high = requester.get_header(cp.height + 1).await.unwrap();
+    let too_high = requester.get_header(cp.height() + 1).await.unwrap();
     assert!(too_high.is_none());
     // height_of_hash for the chain tip should return the tip height
-    let tip_height = requester.height_of_hash(cp.hash).await.unwrap();
+    let tip_height = requester.height_of_hash(cp.block_hash()).await.unwrap();
     assert!(tip_height.is_some());
-    assert_eq!(tip_height.unwrap(), cp.height);
+    assert_eq!(tip_height.unwrap(), cp.height());
     // height_of_hash for an unknown hash should return None
     let fake_hash: BlockHash = bitcoin::hashes::Hash::all_zeros();
     let unknown = requester.height_of_hash(fake_hash).await.unwrap();
@@ -299,7 +299,7 @@ async fn stop_reorg_resync() {
     let (node, client) = new_node(
         socket_addr,
         tempdir.clone(),
-        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(Checkpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -321,7 +321,7 @@ async fn stop_reorg_resync() {
     let (node, client) = new_node(
         socket_addr,
         tempdir.clone(),
-        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(Checkpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -344,7 +344,7 @@ async fn stop_reorg_resync() {
             }
             bip157::messages::Event::FiltersSynced(update) => {
                 println!("Done");
-                assert_eq!(update.tip().hash, best);
+                assert_eq!(update.tip().block_hash(), best);
                 break;
             }
             _ => {}
@@ -359,7 +359,7 @@ async fn stop_reorg_resync() {
     let (node, client) = new_node(
         socket_addr,
         tempdir,
-        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(Checkpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -388,7 +388,7 @@ async fn stop_reorg_two_resync() {
     let (node, client) = new_node(
         socket_addr,
         tempdir.clone(),
-        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(Checkpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -413,7 +413,7 @@ async fn stop_reorg_two_resync() {
     let (node, client) = new_node(
         socket_addr,
         tempdir.clone(),
-        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(Checkpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -435,7 +435,7 @@ async fn stop_reorg_two_resync() {
             }
             bip157::messages::Event::FiltersSynced(update) => {
                 println!("Done");
-                assert_eq!(update.tip().hash, best);
+                assert_eq!(update.tip().block_hash(), best);
                 break;
             }
             _ => {}
@@ -450,7 +450,7 @@ async fn stop_reorg_two_resync() {
     let (node, client) = new_node(
         socket_addr,
         tempdir,
-        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(Checkpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -478,7 +478,7 @@ async fn stop_reorg_start_on_orphan() {
     let (node, client) = new_node(
         socket_addr,
         tempdir.clone(),
-        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(Checkpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -501,7 +501,7 @@ async fn stop_reorg_start_on_orphan() {
     let (node, client) = new_node(
         socket_addr,
         tempdir.clone(),
-        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(Checkpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -528,7 +528,7 @@ async fn stop_reorg_start_on_orphan() {
             }
             bip157::messages::Event::FiltersSynced(update) => {
                 println!("Done");
-                assert_eq!(update.tip().hash, best);
+                assert_eq!(update.tip().block_hash(), best);
                 break;
             }
             _ => {}
@@ -585,7 +585,7 @@ async fn reorg_larger_than_header_batch_syncs_to_tip() {
     let (node, client) = new_node(
         socket_addr,
         tempdir.clone(),
-        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(Checkpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -602,7 +602,7 @@ async fn reorg_larger_than_header_batch_syncs_to_tip() {
                 headers.push(header);
             }
             bip157::messages::Event::FiltersSynced(update) => {
-                assert_eq!(update.tip().hash, best);
+                assert_eq!(update.tip().block_hash(), best);
                 break;
             }
             _ => {}
@@ -711,7 +711,7 @@ async fn tx_can_broadcast() {
     let (node, client) = new_node(
         socket_addr,
         tempdir.clone(),
-        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(Checkpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -820,7 +820,7 @@ async fn one_parent_one_child_can_broadcast() {
     let (node, client) = new_node(
         socket_addr,
         tempdir.clone(),
-        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(Checkpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {
@@ -856,7 +856,7 @@ async fn gossip_subscription() {
 
     let host = (IpAddr::V4(*socket_addr.ip()), socket_addr.port());
     let builder = bip157::builder::Builder::new(bitcoin::Network::Regtest)
-        .chain_state(ChainState::Checkpoint(HashCheckpoint::from_genesis(
+        .chain_state(ChainState::Checkpoint(Checkpoint::from_genesis(
             bitcoin::Network::Regtest,
         )))
         .add_peer(host)
@@ -929,7 +929,7 @@ async fn whitelist_only_sync() {
     let best = best_hash(rpc);
     let host = (IpAddr::V4(*socket_addr.ip()), socket_addr.port());
     let builder = bip157::builder::Builder::new(bitcoin::Network::Regtest)
-        .chain_state(ChainState::Checkpoint(HashCheckpoint::from_genesis(
+        .chain_state(ChainState::Checkpoint(Checkpoint::from_genesis(
             bitcoin::Network::Regtest,
         )))
         .add_peer(host)
@@ -945,12 +945,12 @@ async fn whitelist_only_sync() {
     tokio::task::spawn(async move { print_logs(info_rx, warn_rx).await });
     sync_assert(&best, &mut channel).await;
     let cp = requester.chain_tip().await.unwrap();
-    assert_eq!(cp.hash, best);
+    assert_eq!(cp.block_hash(), best);
     requester.shutdown().unwrap();
     rpc.stop().unwrap();
     // No peer available, white list only.
     let builder = bip157::builder::Builder::new(bitcoin::Network::Regtest)
-        .chain_state(ChainState::Checkpoint(HashCheckpoint::from_genesis(
+        .chain_state(ChainState::Checkpoint(Checkpoint::from_genesis(
             bitcoin::Network::Regtest,
         )))
         .whitelist_only();
@@ -965,7 +965,7 @@ async fn whitelist_only_sync() {
     let best = best_hash(rpc);
     let peer = TrustedPeer::from_hostname(socket_addr.ip().to_string(), socket_addr.port());
     let builder = bip157::builder::Builder::new(bitcoin::Network::Regtest)
-        .chain_state(ChainState::Checkpoint(HashCheckpoint::from_genesis(
+        .chain_state(ChainState::Checkpoint(Checkpoint::from_genesis(
             bitcoin::Network::Regtest,
         )))
         .add_peer(peer)
@@ -981,7 +981,7 @@ async fn whitelist_only_sync() {
     tokio::task::spawn(async move { print_logs(info_rx, warn_rx).await });
     sync_assert(&best, &mut channel).await;
     let cp = requester.chain_tip().await.unwrap();
-    assert_eq!(cp.hash, best);
+    assert_eq!(cp.block_hash(), best);
     requester.shutdown().unwrap();
     rpc.stop().unwrap();
 }
@@ -996,7 +996,7 @@ async fn headers_only_sync_then_rescan() {
     let best = best_hash(rpc);
     let host = (IpAddr::V4(*socket_addr.ip()), socket_addr.port());
     let builder = bip157::builder::Builder::new(bitcoin::Network::Regtest)
-        .chain_state(ChainState::Checkpoint(HashCheckpoint::from_genesis(
+        .chain_state(ChainState::Checkpoint(Checkpoint::from_genesis(
             bitcoin::Network::Regtest,
         )))
         .add_peer(host)
@@ -1016,7 +1016,7 @@ async fn headers_only_sync_then_rescan() {
             match channel.recv().await {
                 Some(Event::IndexedFilter(_)) => filters_before += 1,
                 Some(Event::FiltersSynced(update)) => {
-                    assert_eq!(update.tip().hash, best);
+                    assert_eq!(update.tip().block_hash(), best);
                     break;
                 }
                 _ => {}
@@ -1039,7 +1039,7 @@ async fn headers_only_sync_then_rescan() {
             match channel.recv().await {
                 Some(Event::IndexedFilter(_)) => new_block_filters += 1,
                 Some(Event::FiltersSynced(update)) => {
-                    assert_eq!(update.tip().hash, best);
+                    assert_eq!(update.tip().block_hash(), best);
                     break;
                 }
                 _ => {}
@@ -1059,7 +1059,7 @@ async fn headers_only_sync_then_rescan() {
             match channel.recv().await {
                 Some(Event::IndexedFilter(_)) => filters_after += 1,
                 Some(Event::FiltersSynced(update)) => {
-                    assert_eq!(update.tip().hash, best);
+                    assert_eq!(update.tip().block_hash(), best);
                     break;
                 }
                 _ => {}
@@ -1089,7 +1089,7 @@ async fn inv_fallback_after_burst_mine() {
     let (node, client) = new_node(
         socket_addr,
         tempdir,
-        ChainState::Checkpoint(HashCheckpoint::from_genesis(bitcoin::Network::Regtest)),
+        ChainState::Checkpoint(Checkpoint::from_genesis(bitcoin::Network::Regtest)),
     );
     tokio::task::spawn(async move { node.run().await });
     let Client {

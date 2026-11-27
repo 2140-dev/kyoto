@@ -3,7 +3,7 @@
 
 use bip157::builder::Builder;
 use bip157::chain::ChainState;
-use bip157::{Client, Event, HashCheckpoint, Info, Network, ScriptBuf};
+use bip157::{Checkpoint, Client, Event, Info, Network, ScriptBuf};
 use std::collections::HashSet;
 use tokio::time::Instant;
 
@@ -15,8 +15,8 @@ async fn main() {
     let subscriber = tracing_subscriber::FmtSubscriber::new();
     tracing::subscriber::set_global_default(subscriber).unwrap();
     let now = Instant::now();
-    let checkpoint = HashCheckpoint::taproot_activation();
-    let start_height = checkpoint.height;
+    let checkpoint = Checkpoint::taproot_activation();
+    let start_height = checkpoint.height();
     let mut chain_height = start_height;
     // Add Bitcoin scripts to scan the blockchain for
     let address = ScriptBuf::new_op_return(b"Kyoto light client");
@@ -57,13 +57,13 @@ async fn main() {
         tokio::select! {
             Some(event) = event_rx.recv() => {
                 if let Event::FiltersSynced(update) = event {
-                    tracing::info!("Chain tip: {}",update.tip().hash);
+                    tracing::info!("Chain tip: {}",update.tip().block_hash());
                     // Request information from the node
                     let fee = requester.broadcast_min_feerate().await.unwrap();
                     tracing::info!("Minimum transaction broadcast fee rate: {:#}", fee);
                     let sync_time = now.elapsed().as_secs_f32();
                     tracing::info!("Total sync time: {sync_time} seconds");
-                    let avg_fee_rate = requester.average_fee_rate(update.tip().hash).await.unwrap();
+                    let avg_fee_rate = requester.average_fee_rate(update.tip().block_hash()).await.unwrap();
                     tracing::info!("Last block average fee rate: {:#}", avg_fee_rate);
                     break;
                 }
