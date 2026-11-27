@@ -42,6 +42,7 @@ pub(crate) struct Tip {
     pub hash: BlockHash,
     pub height: Height,
     pub next_work_required: Option<CompactTarget>,
+    pub acc_work: Work,
 }
 
 impl Tip {
@@ -50,6 +51,7 @@ impl Tip {
             hash,
             height,
             next_work_required: None,
+            acc_work: Work::zero(),
         }
     }
 }
@@ -71,18 +73,16 @@ impl From<IndexedHeader> for Tip {
 pub(crate) struct BlockNode {
     pub height: Height,
     pub header: Header,
-    pub acc_work: Work,
     pub filter_commitment: Option<FilterCommitment>,
     pub filter_checked: bool,
     pub cf_header_assumed: bool,
 }
 
 impl BlockNode {
-    fn new(height: Height, header: Header, acc_work: Work) -> Self {
+    fn new(height: Height, header: Header) -> Self {
         Self {
             height,
             header,
-            acc_work,
             filter_commitment: None,
             filter_checked: false,
             cf_header_assumed: false,
@@ -120,6 +120,7 @@ impl BlockTree {
             hash,
             height,
             next_work_required: Some(genesis.header.bits),
+            acc_work: Work::zero(),
         };
         let headers = HashMap::with_capacity(20_000);
         Self {
@@ -158,14 +159,9 @@ impl BlockTree {
                 hash: new_hash,
                 height: new_height,
                 next_work_required: next_work,
+                acc_work: self.active_tip.acc_work + new_header.work(),
             };
-            let prev_work = self
-                .headers
-                .get(&prev_hash)
-                .map(|block| block.acc_work)
-                .unwrap_or(Work::zero());
-            let new_work = prev_work + new_header.work();
-            let new_block_node = BlockNode::new(new_height, new_header, new_work);
+            let new_block_node = BlockNode::new(new_height, new_header);
             self.headers.insert(new_hash, new_block_node);
             self.active_tip = new_tip;
             self.canonical_hashes.insert(new_height, new_hash);
@@ -204,21 +200,15 @@ impl BlockTree {
                     }
                 }
                 self.candidate_forks.swap_remove(fork_index);
-                let acc_work = node.acc_work + new_header.work();
                 let new_tip = Tip {
                     hash: new_hash,
                     height: new_height,
                     next_work_required: next_work,
+                    acc_work: fork.acc_work + new_header.work(),
                 };
-                let new_block_node = BlockNode::new(new_height, new_header, acc_work);
+                let new_block_node = BlockNode::new(new_height, new_header);
                 self.headers.insert(new_hash, new_block_node);
-                if acc_work
-                    > self
-                        .headers
-                        .get(&self.active_tip.hash)
-                        .map(|node| node.acc_work)
-                        .unwrap_or(Work::zero())
-                {
+                if new_tip.acc_work > self.active_tip.acc_work {
                     self.candidate_forks.push(self.active_tip);
                     self.active_tip = new_tip;
                     let (accepted, disconnected) = self.switch_to_fork(&new_tip);
@@ -256,14 +246,33 @@ impl BlockTree {
                         });
                     }
                 }
-                let acc_work = node.acc_work + new_header.work();
+                let fork_height = self
+                    .ancestors(prev_hash)
+                    .find(|ancestor| {
+                        self.block_hash_at_height(ancestor.height)
+                            == Some(ancestor.header.block_hash())
+                    })
+                    .map(|ancestor| ancestor.height)
+                    .unwrap_or_default();
+                let active_work_above_fork = self
+                    .iter_data()
+                    .take_while(|ancestor| ancestor.height > fork_height)
+                    .fold(Work::zero(), |acc, ancestor| acc + ancestor.header.work());
+                let fork_work_above_fork = self
+                    .ancestors(prev_hash)
+                    .take_while(|ancestor| ancestor.height > fork_height)
+                    .fold(Work::zero(), |acc, ancestor| acc + ancestor.header.work());
                 let new_tip = Tip {
                     hash: new_hash,
                     height: new_height,
                     next_work_required: next_work,
+                    // Swap the active branch's work above the fork point for the new branch's work.
+                    acc_work: self.active_tip.acc_work - active_work_above_fork
+                        + fork_work_above_fork
+                        + new_header.work(),
                 };
                 self.candidate_forks.push(new_tip);
-                let new_block_node = BlockNode::new(new_height, new_header, acc_work);
+                let new_block_node = BlockNode::new(new_height, new_header);
                 self.headers.insert(new_hash, new_block_node);
                 AcceptHeaderChanges::ExtendedFork {
                     connected_at: IndexedHeader::new(new_height, new_header),
@@ -737,7 +746,7 @@ mod tests {
     ) -> Work {
         let work = previous_work + header.work();
         tree.headers
-            .insert(header.block_hash(), BlockNode::new(height, header, work));
+            .insert(header.block_hash(), BlockNode::new(height, header));
         if canonical {
             tree.canonical_hashes.insert(height, header.block_hash());
         }
@@ -772,6 +781,7 @@ mod tests {
             hash: old.block_hash(),
             height: 2020,
             next_work_required: Some(easy),
+            acc_work: old_work,
         };
 
         let mut fork = common;
@@ -788,6 +798,7 @@ mod tests {
             hash: fork.block_hash(),
             height: 2016,
             next_work_required: Some(hard),
+            acc_work: fork_work,
         });
 
         let mut winning = fork;
@@ -855,6 +866,113 @@ mod tests {
             AcceptHeaderChanges::Reorganization { .. }
         ));
         assert_eq!(tree.tip_hash(), b4.block_hash());
+    }
+
+    #[test]
+    fn test_reorg_back_then_fork_from_stale_block() {
+        let mut tree = BlockTree::from_genesis(Network::Regtest);
+        let genesis = genesis_block(Network::Regtest).header;
+        let bits = genesis.bits;
+        let common = mine_child(genesis, 600, bits);
+        let a2 = mine_child(common, 600, bits);
+        let a3 = mine_child(a2, 600, bits);
+        let b2 = mine_child(common, 601, bits);
+        let b3 = mine_child(b2, 600, bits);
+        let b4 = mine_child(b3, 600, bits);
+        for header in [common, a2, a3, b2, b3] {
+            tree.accept_header(header);
+        }
+        assert!(matches!(
+            tree.accept_header(b4),
+            AcceptHeaderChanges::Reorganization { .. }
+        ));
+        assert_eq!(tree.tip_hash(), b4.block_hash());
+
+        let a4 = mine_child(a3, 600, bits);
+        let a5 = mine_child(a4, 600, bits);
+        assert!(matches!(
+            tree.accept_header(a4),
+            AcceptHeaderChanges::ExtendedFork { .. }
+        ));
+        assert!(matches!(
+            tree.accept_header(a5),
+            AcceptHeaderChanges::Reorganization { .. }
+        ));
+        assert_eq!(tree.tip_hash(), a5.block_hash());
+        assert_eq!(tree.header_at_height(2), Some(a2));
+
+        let c3 = mine_child(b2, 602, bits);
+        let c4 = mine_child(c3, 600, bits);
+        let c5 = mine_child(c4, 600, bits);
+        let c6 = mine_child(c5, 600, bits);
+        for header in [c3, c4, c5] {
+            assert!(matches!(
+                tree.accept_header(header),
+                AcceptHeaderChanges::ExtendedFork { .. }
+            ));
+        }
+        assert_eq!(tree.tip_hash(), a5.block_hash());
+        assert!(matches!(
+            tree.accept_header(c6),
+            AcceptHeaderChanges::Reorganization { .. }
+        ));
+        assert_eq!(tree.tip_hash(), c6.block_hash());
+        assert_eq!(tree.header_at_height(2), Some(b2));
+        assert_eq!(tree.header_at_height(3), Some(c3));
+    }
+
+    #[test]
+    fn test_longer_fork_with_less_work() {
+        let network = Network::Bitcoin;
+        let hard = CompactTarget::from_consensus(0x1c0ffff0);
+        let easy = CompactTarget::from_consensus(0x1c3fffc0);
+        let template = genesis_block(network).header;
+        let child = |parent: Header, delay: u32, bits: CompactTarget| {
+            let mut child = template;
+            child.prev_blockhash = parent.block_hash();
+            child.time = parent.time + delay;
+            child.bits = bits;
+            child
+        };
+        let mut common = template;
+        common.bits = easy;
+        let mut tree = BlockTree::new(Tip::from_checkpoint(99, common.prev_blockhash), network);
+        let a101 = child(common, 600, hard);
+        let a102 = child(a101, 600, hard);
+        for header in [common, a101, a102] {
+            assert!(matches!(
+                tree.accept_header(header),
+                AcceptHeaderChanges::Accepted { .. }
+            ));
+        }
+        let active_work = a101.work() + a102.work();
+
+        let mut fork = Vec::new();
+        let mut parent = common;
+        for _ in 0..9 {
+            let next = child(parent, 601, easy);
+            fork.push(next);
+            parent = next;
+        }
+        let fork_work = |len: usize| {
+            fork[..len]
+                .iter()
+                .fold(Work::zero(), |acc, header| acc + header.work())
+        };
+        assert!(fork_work(8) <= active_work);
+        assert!(fork_work(9) > active_work);
+        for header in &fork[..8] {
+            assert!(matches!(
+                tree.accept_header(*header),
+                AcceptHeaderChanges::ExtendedFork { .. }
+            ));
+        }
+        assert_eq!(tree.tip_hash(), a102.block_hash());
+        assert!(matches!(
+            tree.accept_header(fork[8]),
+            AcceptHeaderChanges::Reorganization { .. }
+        ));
+        assert_eq!(tree.height(), 109);
     }
 
     #[test]
